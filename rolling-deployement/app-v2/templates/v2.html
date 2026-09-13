@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FoodExpress 2.0 | New Release</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Inter, Segoe UI, Arial, sans-serif;
+    background: #f7faf7;
+    color: #151915;
+}
+
+nav {
+    height: 72px;
+    background: #fff;
+    border-bottom: 1px solid #e2eadf;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 7%;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 850;
+    color: #15803d;
+}
+
+.nav-links {
+    display: flex;
+    gap: 28px;
+    color: #777;
+    font-size: 14px;
+}
+
+.nav-links b {
+    color: #151915;
+}
+
+.version {
+    background: #ecfdf3;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+    padding: 8px 13px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.release {
+    background: linear-gradient(90deg, #15803d, #22c55e);
+    color: white;
+    padding: 12px 7%;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 13px;
+}
+
+.release strong {
+    background: rgba(255,255,255,.18);
+    padding: 6px 10px;
+    border-radius: 999px;
+}
+
+.hero {
+    padding: 76px 7% 64px;
+    background:
+        radial-gradient(circle at 10% 15%, #dcfce7 0, transparent 35%),
+        linear-gradient(135deg,#f7faf7,#effdf3);
+}
+
+.kicker {
+    display:inline-block;
+    padding:7px 11px;
+    border-radius:999px;
+    background:#fff;
+    border:1px solid #bbf7d0;
+    color:#15803d;
+    font-size:11px;
+    font-weight:850;
+    letter-spacing:.1em;
+}
+
+h1 {
+    font-size: clamp(40px,6vw,70px);
+    line-height:1;
+    letter-spacing:-.055em;
+    max-width:800px;
+    margin:18px 0;
+}
+
+.hero p {
+    max-width:680px;
+    color:#68736a;
+    font-size:18px;
+    line-height:1.65;
+}
+
+.buttons {
+    margin-top:27px;
+    display:flex;
+    gap:12px;
+}
+
+button {
+    padding:13px 18px;
+    border-radius:12px;
+    background:#fff;
+    border:1px solid #d9e5dc;
+    font-weight:750;
+}
+
+.primary {
+    background:#151915;
+    color:white;
+    border-color:#151915;
+}
+
+main {
+    padding:42px 7% 70px;
+}
+
+.heading {
+    display:flex;
+    justify-content:space-between;
+    align-items:end;
+    margin-bottom:22px;
+}
+
+.heading h2 {
+    margin:0;
+    font-size:28px;
+}
+
+.muted {
+    color:#7a847d;
+    font-size:13px;
+}
+
+.grid {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:18px;
+}
+
+.card {
+    background:#fff;
+    border:1px solid #e1e9e3;
+    border-radius:20px;
+    overflow:hidden;
+    box-shadow:0 12px 30px rgba(20,60,30,.06);
+    transition:.2s;
+}
+
+.card:hover {
+    transform:translateY(-4px);
+}
+
+.visual {
+    height:165px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    background:linear-gradient(145deg,#eafff0,#f9fff9);
+    font-size:65px;
+}
+
+.body {
+    padding:18px;
+}
+
+.body h3 {
+    margin:0 0 7px;
+    font-size:17px;
+}
+
+.rating {
+    color:#15803d;
+    font-size:20px;
+    font-weight:850;
+}
+
+.description {
+    color:#727d75;
+    font-size:13px;
+    line-height:1.5;
+    margin-top:8px;
+}
+
+.tag {
+    display:inline-block;
+    margin-top:13px;
+    padding:6px 9px;
+    border-radius:8px;
+    background:#ecfdf3;
+    color:#15803d;
+    font-size:11px;
+    font-weight:850;
+}
+
+.v2box {
+    margin-top:30px;
+    background:linear-gradient(135deg,#112016,#193624);
+    color:white;
+    border-radius:22px;
+    padding:25px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:20px;
+}
+
+.v2box h3 {
+    margin:0 0 8px;
+}
+
+.v2box p {
+    color:#c8d5cc;
+    font-size:14px;
+    line-height:1.6;
+}
+
+.canary {
+    background:#22c55e;
+    padding:10px 13px;
+    border-radius:10px;
+    font-weight:850;
+    white-space:nowrap;
+}
+
+.telemetry {
+    margin-top:18px;
+    background:#fff;
+    border:1px solid #dfe9e1;
+    border-radius:20px;
+    padding:22px;
+}
+
+.stats {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:12px;
+    margin-top:15px;
+}
+
+.stat {
+    background:#f5fbf6;
+    padding:14px;
+    border-radius:13px;
+    border:1px solid #e3eee5;
+}
+
+.stat span {
+    display:block;
+    color:#7a847d;
+    font-size:10px;
+    text-transform:uppercase;
+}
+
+.stat strong {
+    display:block;
+    margin-top:5px;
+    font-size:14px;
+}
+
+footer {
+    border-top:1px solid #e1e9e3;
+    padding:24px;
+    text-align:center;
+    color:#7a847d;
+    font-size:12px;
+}
+
+@media(max-width:900px) {
+    .grid { grid-template-columns:repeat(2,1fr); }
+    .stats { grid-template-columns:repeat(2,1fr); }
+}
+
+@media(max-width:600px) {
+    .nav-links { display:none; }
+    .grid { grid-template-columns:1fr; }
+    .stats { grid-template-columns:1fr; }
+    .v2box { flex-direction:column; align-items:flex-start; }
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+
+<div class="logo">
+FoodExpress
+</div>
+
+<div class="nav-links">
+<b>Home</b>
+<span>Restaurants</span>
+<span>Offers</span>
+<span>Orders</span>
+</div>
+
+<div class="version">
+VERSION 2.0
+</div>
+
+</nav>
+
+<div class="release">
+
+<strong>NEW RELEASE</strong>
+
+<span>
+FoodExpress 2.0 is now available as our Canary Candidate
+</span>
+
+</div>
+
+<section class="hero">
+
+<div class="kicker">
+CANARY VERSION
+</div>
+
+<h1>
+Fresh picks.<br>
+<span style="color:#16a34a;">
+FoodExpress 2.0 is here.
+</span>
+</h1>
+
+<p>
+Discover a refreshed food-delivery experience with an updated
+visual identity and improved restaurant presentation. This is the
+new version used in our deployment experiment.
+</p>
+
+<div class="buttons">
+
+<button class="primary">
+Explore Restaurants
+</button>
+
+<button>
+Today's Offers
+</button>
+
+</div>
+
+</section>
+
+<main>
+
+<div class="heading">
+
+<div>
+<h2>
+Popular Near You
+</h2>
+
+<div class="muted">
+Version 2.0 restaurant experience
+</div>
+</div>
+
+<div class="muted">
+Release: <b style="color:#15803d;">CANARY</b>
+</div>
+
+</div>
+
+<section class="grid">
+
+<article class="card">
+
+<div class="visual">
+🍕
+</div>
+
+<div class="body">
+
+<h3>
+Pizza House
+</h3>
+
+<div class="rating">
+⭐ 4.7
+</div>
+
+<div class="description">
+Fresh pizzas, pasta and delicious sides.
+</div>
+
+<div class="tag">
+UPDATED MENU
+</div>
+
+</div>
+
+</article>
+
+
+<article class="card">
+
+<div class="visual">
+🍔
+</div>
+
+<div class="body">
+
+<h3>
+Burger Point
+</h3>
+
+<div class="rating">
+⭐ 4.6
+</div>
+
+<div class="description">
+Juicy burgers, fries and refreshing shakes.
+</div>
+
+<div class="tag">
+NEW V2 FEATURE
+</div>
+
+</div>
+
+</article>
+
+
+<article class="card">
+
+<div class="visual">
+🍜
+</div>
+
+<div class="body">
+
+<h3>
+Wok Express
+</h3>
+
+<div class="rating">
+⭐ 4.8
+</div>
+
+<div class="description">
+Fresh noodles, rice bowls and stir-fry dishes.
+</div>
+
+<div class="tag">
+UPDATED
+</div>
+
+</div>
+
+</article>
+
+
+<article class="card">
+
+<div class="visual">
+☕
+</div>
+
+<div class="body">
+
+<h3>
+Cafe Corner
+</h3>
+
+<div class="rating">
+⭐ 4.5
+</div>
+
+<div class="description">
+Coffee, sandwiches and desserts.
+</div>
+
+<div class="tag">
+NEW V2 FEATURE
+</div>
+
+</div>
+
+</article>
+
+</section>
+
+<section class="v2box">
+
+<div>
+
+<h3>
+🚀 FoodExpress Version 2.0
+</h3>
+
+<p>
+This is the new application version that will gradually receive
+traffic during our canary deployment experiment. The visual
+changes make the V1 → V2 transition immediately visible.
+</p>
+
+</div>
+
+<div class="canary">
+CANARY CANDIDATE
+</div>
+
+</section>
+
+<section class="telemetry">
+
+<h3>
+Deployment Information
+</h3>
+
+<div class="stats">
+
+<div class="stat">
+<span>Application</span>
+<strong>FoodExpress</strong>
+</div>
+
+<div class="stat">
+<span>Version</span>
+<strong>V2.0</strong>
+</div>
+
+<div class="stat">
+<span>Release</span>
+<strong>Canary Candidate</strong>
+</div>
+
+<div class="stat">
+<span>Status</span>
+<strong style="color:#16a34a;">
+Healthy
+</strong>
+</div>
+
+</div>
+
+</section>
+
+</main>
+
+<footer>
+FoodExpress 2.0 · Kubernetes · Istio · k6 · Prometheus · Grafana
+</footer>
+
+</body>
+</html>
