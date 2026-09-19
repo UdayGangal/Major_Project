@@ -47,7 +47,13 @@ spec:
           command:
             - k6
             - run
+            - -o
+            - experimental-prometheus-rw
             - /scripts/script.js
+
+          env:
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: http://prometheus:9090/api/v1/write
 
           volumeMounts:
             - name: k6-script
