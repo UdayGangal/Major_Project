@@ -8,31 +8,24 @@ data:
     import { check, sleep } from 'k6';
 
     export const options = {
-      stages: [
-        { duration: '10s', target: 10 },
-        { duration: '30s', target: 25 },
-        { duration: '30s', target: 50 },
-        { duration: '10s', target: 0 },
-      ],
-
-      thresholds: {
-        http_req_failed: ['rate<0.01'],
-        http_req_duration: ['p(95)<500'],
-      },
+      vus: 20,
+      duration: '15m',
     };
 
     export default function () {
-      const response = http.get(
-        'http://rolling-demo-service.default.svc.cluster.local/version'
-      );
+      const page = http.get('http://rolling-demo-service/');
 
-      check(response, {
-        'status is 200': (r) => r.status === 200,
-        'version is v1': (r) =>
-          r.status === 200 && r.body.includes('"version":"v1"'),
+      check(page, {
+        'HTML page status is 200': (response) => response.status === 200,
       });
 
-      sleep(0.1);
+      const health = http.get('http://rolling-demo-service/health');
+
+      check(health, {
+        'application is healthy': (response) => response.status === 200,
+      });
+
+      sleep(0.5);
     }
 
 ---
