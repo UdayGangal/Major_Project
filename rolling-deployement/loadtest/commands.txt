@@ -1,0 +1,39 @@
+kubectl apply -f kubernetes\service.yaml 
+kubectl apply -f kubernetes\deployment.yaml
+kubectl scale deployment rolling-demo --replicas=4
+kubectl port-forward service/rolling-demo-service 8080:80
+
+
+
+#FOR K6
+kubectl delete -f loadtest\k6-load.yaml 
+kubectl apply -f loadtest\k6-load.yaml
+kubectl get pods //to get the name of the K6 POD
+kubectl logs -f <NAME_OF_YOUR_POD>
+
+
+#FOR PODS LIVE HEALTH
+kubectl get pods -w   
+
+
+#TO SET
+kubectl set image deployment/rolling-demo rolling-demo=shonnnttyyy/app-v1/v2:latest
+kubectl rollout status deployment/rolling-demo   
+
+
+#FOR LIVE SITE MONITOIRNG(OPEN IN POWERSHEEL)
+ while ($true) {
+>>     try {
+>>         $response = Invoke-WebRequest `
+>>             -Uri "http://localhost:8080/health" `
+>>             -UseBasicParsing `
+>>             -TimeoutSec 2
+>>
+>>         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') HEALTHY $($response.StatusCode)" -ForegroundColor Green
+>>     }
+>>     catch {
+>>         Write-Host "$(Get-Date -Format 'HH:mm:ss.fff') FAILED" -ForegroundColor Red
+>>     }
+>>
+>>     Start-Sleep -Milliseconds 500
+>> }

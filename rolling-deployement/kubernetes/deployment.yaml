@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: rolling-demo
 spec:
-  replicas: 4
+  replicas: 8
 
   strategy:
     type: RollingUpdate
@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: rolling-demo
-          image: swain15/rolling-demo:v1
+          image: shonnnttyyy/rolling-demo:v1
           imagePullPolicy: Always
 
           ports:

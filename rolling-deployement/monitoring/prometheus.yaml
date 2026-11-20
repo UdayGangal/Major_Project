@@ -40,7 +40,7 @@ data:
           - targets: ["localhost:9090"]
       - job_name: rolling-demo
         kubernetes_sd_configs:
-          - role: pod
+          - role: pod 
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep

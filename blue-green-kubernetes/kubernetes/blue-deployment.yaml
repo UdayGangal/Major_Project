@@ -1,0 +1,56 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blue-deployment
+
+spec:
+  replicas: 4
+
+  selector:
+    matchLabels:
+      app: rolling-demo
+      version: blue
+
+  template:
+    metadata:
+      labels:
+        app: rolling-demo
+        version: blue
+
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "5000"
+
+    spec:
+      containers:
+        - name: blue-app
+          image: shonnnttyyy/blue-green-demo:blue-v1
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 5000
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
