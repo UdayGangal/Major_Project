@@ -1,0 +1,71 @@
+
+RECREATE DEPLOYMENT EXPERIMENT
+Run commands from the Major_Project root folder in PowerShell.
+
+1. CHECK KUBERNETES
+
+kubectl config current-context
+kubectl get nodes
+kubectl get svc prometheus
+
+
+2. DEPLOY VERSION 1 AND SERVICE
+
+kubectl apply -f .\recreate\deployment-v1.yaml
+kubectl apply -f .\recreate\service.yaml
+
+kubectl rollout status deployment/recreate-demo --timeout=5m
+kubectl get pods -l app=recreate-demo -o wide
+kubectl get endpointslice -l kubernetes.io/service-name=recreate-demo-service
+
+
+3. START THE K6 LOAD TEST
+
+kubectl apply -f .\recreate\k6-recreate.yaml
+kubectl get pods -l job-name=recreate-demo-k6-run
+
+
+4. OPEN A SECOND POWERSHELL TERMINAL
+
+Keep the first terminal available for monitoring k6.
+
+In the FIRST terminal, run:
+
+kubectl logs -f job/recreate-demo-k6-run
+
+Wait approximately 30-60 seconds so that the baseline traffic is established.
+
+
+5. DEPLOY VERSION 2 DURING THE LOAD TEST
+
+In the SECOND terminal, run:
+
+$start = Get-Date
+
+kubectl apply -f .\recreate\deployment-v2.yaml
+
+kubectl rollout status deployment/recreate-demo --timeout=5m
+
+$end = Get-Date
+
+"Recreate deployment duration (seconds): {0:N2}" -f ($end - $start).TotalSeconds
+
+
+6. CHECK THE FINAL DEPLOYMENT
+
+kubectl get deployment recreate-demo -o wide
+kubectl get pods -l app=recreate-demo -o wide
+kubectl get endpointslice -l kubernetes.io/service-name=recreate-demo-service
+
+
+7. WAIT FOR K6 TO FINISH
+
+kubectl wait --for=condition=complete job/recreate-demo-k6-run --timeout=22m
+
+kubectl logs job/recreate-demo-k6-run
+
+
+8. CLEAN UP AFTER SAVING RESULTS
+
+kubectl delete job recreate-demo-k6-run
+kubectl delete configmap recreate-demo-k6-script
