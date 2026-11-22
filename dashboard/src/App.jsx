@@ -1,6 +1,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import Sidebar from './components/Sidebar';
 import StatCard from './components/StatCard';
 import ComparisonChart from './components/ComparisonChart';
 import StrategySection from './components/StrategySection';
@@ -21,6 +22,27 @@ const STRATEGY_NAMES = {
   rolling: 'Rolling Update',
   recreate: 'Recreate',
   'blue-green': 'Blue-Green'
+};
+
+const STRATEGY_DESCRIPTIONS = {
+  rolling: 'Gradually replaces old application Pods with new Pods while maintaining service capacity.',
+  recreate: 'Terminates the existing application Pods before starting the new application version.',
+  'blue-green': 'Maintains two application environments and switches traffic between Blue and Green.',
+  canary: 'Gradually exposes a new application version to a controlled percentage of traffic.'
+};
+
+const STRATEGY_STATUS = {
+  rolling: 'IMPLEMENTED',
+  recreate: 'EXPERIMENT COMPLETED',
+  'blue-green': 'EXPERIMENT PENDING',
+  canary: 'PLANNED'
+};
+
+const STRATEGY_COLORS = {
+  rolling: '#438cf5',
+  recreate: '#e5a34b',
+  'blue-green': '#2eae91',
+  canary: '#9b7bea'
 };
 
 function metricQueries(strategy) {
@@ -68,7 +90,120 @@ const format = (value, digits = 2) =>
     ? '—'
     : value.toFixed(digits);
 
+function StrategyCard({ strategy, data, onOpen }) {
+  const stats = data?.stats || {};
+
+  return (
+    <button
+      type="button"
+      className="strategy-overview-card"
+      onClick={onOpen}
+      style={{ '--strategy-color': STRATEGY_COLORS[strategy] }}
+    >
+      <div className="strategy-card-top">
+        <span className="strategy-card-indicator" />
+        <span className="strategy-card-status">
+          {STRATEGY_STATUS[strategy]}
+        </span>
+      </div>
+
+      <h3>{STRATEGY_NAMES[strategy]}</h3>
+
+      <p>{STRATEGY_DESCRIPTIONS[strategy]}</p>
+
+      <div className="strategy-card-metrics">
+        <div>
+          <span>Healthy Pods</span>
+          <strong>
+            {stats.healthy == null
+              ? '—'
+              : `${format(stats.healthy, 0)} / ${format(stats.total, 0)}`}
+          </strong>
+        </div>
+
+        <div>
+          <span>Requests / Sec</span>
+          <strong>{format(stats.rps)}</strong>
+        </div>
+      </div>
+
+      <span className="strategy-card-action">
+        Open workspace <span>→</span>
+      </span>
+    </button>
+  );
+}
+
+function CanaryPlannedPage() {
+  return (
+    <div className="page-stack">
+
+      <section className="strategy-hero canary-hero">
+        <div className="strategy-hero-content">
+          <span className="strategy-hero-label">
+            DEPLOYMENT STRATEGY 04
+          </span>
+
+          <h2>Canary Deployment</h2>
+
+          <p>{STRATEGY_DESCRIPTIONS.canary}</p>
+
+          <span className="strategy-status-badge">
+            PLANNED IMPLEMENTATION
+          </span>
+        </div>
+
+        <div className="strategy-hero-symbol">◉</div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="panel-kicker">IMPLEMENTATION PLAN</p>
+            <h2>Canary Deployment Workflow</h2>
+          </div>
+        </div>
+
+        <div className="canary-steps">
+          {[
+            ['01', 'Deploy V1 and V2', 'Run both application versions.'],
+            ['02', 'Initial traffic split', 'Send a small percentage of traffic to V2.'],
+            ['03', 'Monitor performance', 'Observe error rate, latency and application health.'],
+            ['04', 'Promote or rollback', 'Increase traffic or return traffic to V1 based on approved rules.']
+          ].map(step => (
+            <div className="canary-step" key={step[0]}>
+              <span>{step[0]}</span>
+              <div>
+                <strong>{step[1]}</strong>
+                <p>{step[2]}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel pending-panel">
+        <div className="pending-indicator">i</div>
+        <div>
+          <h3>Implementation not connected yet</h3>
+          <p>
+            Istio traffic routing, percentage-based version exposure,
+            automatic promotion and rollback metrics will be connected
+            during the Canary implementation phase.
+          </p>
+          <span>
+            No live Canary measurements are reported at this stage.
+          </span>
+        </div>
+      </section>
+
+    </div>
+  );
+}
+
 export default function App() {
+  const [activePage, setActivePage] = useState('overview');
+
   const [data, setData] = useState({});
   const [pods, setPods] = useState([]);
   const [k6Metrics, setK6Metrics] = useState([]);
@@ -116,6 +251,7 @@ export default function App() {
 
           return {
             strategy,
+
             stats: {
               healthy: valueOf(healthy),
               total: valueOf(total),
@@ -123,6 +259,7 @@ export default function App() {
               errors: valueOf(errors),
               p95: valueOf(p95)
             },
+
             pods: podHealth.map(series => ({
               name: series.metric.pod,
               strategy,
@@ -208,119 +345,285 @@ export default function App() {
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const totals = STRATEGIES.reduce((result, strategy) => {
-    const stats = data[strategy]?.stats;
+  const totals = STRATEGIES.reduce(
+    (result, strategy) => {
+      const stats = data[strategy]?.stats;
 
-    if (!stats) return result;
+      if (!stats) return result;
 
-    result.healthy += stats.healthy || 0;
-    result.total += stats.total || 0;
+      result.healthy += stats.healthy || 0;
+      result.total += stats.total || 0;
 
-    return result;
-  }, { healthy: 0, total: 0 });
+      return result;
+    },
+    { healthy: 0, total: 0 }
+  );
 
   const totalRps = STRATEGIES.reduce(
     (sum, strategy) => sum + (data[strategy]?.stats.rps || 0),
     0
   );
 
+  const selectedStrategy = STRATEGIES.includes(activePage)
+    ? activePage
+    : null;
+
+  const selectedData = selectedStrategy
+    ? data[selectedStrategy] || { stats: {}, pods: [] }
+    : null;
+
+  const selectedPods = selectedStrategy
+    ? pods.filter(pod => pod.strategy === selectedStrategy)
+    : pods;
+
+  const selectedRequests = selectedStrategy
+    ? requestHistory.filter(item => item.strategy === selectedStrategy)
+    : requestHistory;
+
+  const selectedLatency = selectedStrategy
+    ? latencyHistory.filter(item => item.strategy === selectedStrategy)
+    : latencyHistory;
+
+  const selectedHealth = selectedStrategy
+    ? healthHistory.filter(item => item.strategy === selectedStrategy)
+    : healthHistory;
+
+  const pageTitle = selectedStrategy
+    ? STRATEGY_NAMES[selectedStrategy]
+    : activePage === 'canary'
+      ? 'Canary Deployment'
+      : 'Deployment Overview';
+
   return (
-    <main>
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">CLOUD-NATIVE DEPLOYMENT MONITORING</p>
-          <h1>Unified Deployment Dashboard</h1>
-          <p className="subtitle">
-            Real-time monitoring of Rolling, Recreate and Blue-Green deployments
+    <div className="app-shell">
+
+      <Sidebar
+        activePage={activePage}
+        onNavigate={setActivePage}
+      />
+
+      <main className="main-content">
+
+        <header className="dashboard-header">
+          <div className="header-title">
+            <p className="eyebrow">
+              CLOUD-NATIVE DEPLOYMENT MONITORING
+            </p>
+
+            <h1>{pageTitle}</h1>
+
+            <p className="subtitle">
+              {selectedStrategy
+                ? STRATEGY_DESCRIPTIONS[selectedStrategy]
+                : activePage === 'canary'
+                  ? 'Progressive traffic management and controlled release monitoring.'
+                  : 'Monitor, analyse and compare Kubernetes deployment strategies.'}
+            </p>
+          </div>
+
+          <div className="header-actions">
+
+            <div className={`connection ${status === 'Live' ? 'online' : ''}`}>
+              <i />
+              <span>{status}</span>
+
+              <small>
+                {lastUpdated
+                  ? `Updated ${lastUpdated.toLocaleTimeString()}`
+                  : 'Waiting for metrics'}
+              </small>
+            </div>
+
+            <button
+              type="button"
+              className="refresh-button"
+              onClick={refresh}
+            >
+              ↻ Refresh
+            </button>
+
+          </div>
+        </header>
+
+        {activePage === 'overview' && (
+          <div className="page-stack">
+
+            <section className="welcome-banner">
+              <div>
+                <span>PROJECT MONITORING CENTER</span>
+                <h2>Deployment Operations Overview</h2>
+                <p>
+                  A unified view of your application deployment
+                  lifecycle and operational performance.
+                </p>
+              </div>
+
+              <div className="welcome-decoration">D</div>
+            </section>
+
+            <section className="overview-heading">
+              <div>
+                <p className="panel-kicker">SYSTEM SUMMARY</p>
+                <h2>Platform health at a glance</h2>
+              </div>
+            </section>
+
+            <section className="stats">
+              <StatCard
+                label="Healthy Pods"
+                value={`${totals.healthy} / ${totals.total}`}
+                detail="Across monitored strategies"
+                tone="green"
+              />
+
+              <StatCard
+                label="Total Requests / Sec"
+                value={format(totalRps)}
+                detail="Combined application traffic"
+              />
+
+              <StatCard
+                label="Active k6 Series"
+                value={k6Metrics.length}
+                detail="Prometheus remote-write series"
+                tone="orange"
+              />
+            </section>
+
+            <section className="overview-heading">
+              <div>
+                <p className="panel-kicker">DEPLOYMENT WORKSPACES</p>
+                <h2>Explore each deployment technique</h2>
+              </div>
+            </section>
+
+            <section className="strategy-overview-grid">
+              {STRATEGIES.map(strategy => (
+                <StrategyCard
+                  key={strategy}
+                  strategy={strategy}
+                  data={data[strategy]}
+                  onOpen={() => setActivePage(strategy)}
+                />
+              ))}
+
+              <StrategyCard
+                strategy="canary"
+                data={{ stats: {} }}
+                onOpen={() => setActivePage('canary')}
+              />
+            </section>
+
+            <ComparisonChart
+              title="Request Rate Comparison"
+              unit="requests / second"
+              series={requestHistory}
+            />
+
+            <ComparisonChart
+              title="P95 Latency Comparison"
+              unit="milliseconds"
+              series={latencyHistory.map(item => ({
+                ...item,
+                values: item.values.map(point => ({
+                  ...point,
+                  value: point.value * 1000
+                }))
+              }))}
+            />
+
+            <ComparisonChart
+              title="Healthy Pods Comparison"
+              unit="healthy pods"
+              series={healthHistory}
+            />
+
+            <PodTable pods={pods} />
+
+            <K6Metrics metrics={k6Metrics} />
+
+          </div>
+        )}
+
+        {selectedStrategy && (
+          <div className="page-stack">
+
+            <section
+              className={`strategy-hero ${selectedStrategy}-hero`}
+              style={{
+                '--strategy-color': STRATEGY_COLORS[selectedStrategy]
+              }}
+            >
+              <div className="strategy-hero-content">
+                <span className="strategy-hero-label">
+                  DEPLOYMENT STRATEGY WORKSPACE
+                </span>
+
+                <h2>{STRATEGY_NAMES[selectedStrategy]}</h2>
+
+                <p>{STRATEGY_DESCRIPTIONS[selectedStrategy]}</p>
+
+                <span className="strategy-status-badge">
+                  {STRATEGY_STATUS[selectedStrategy]}
+                </span>
+              </div>
+
+              <div className="strategy-hero-symbol">
+                {selectedStrategy === 'rolling'
+                  ? '↻'
+                  : selectedStrategy === 'recreate'
+                    ? '⟳'
+                    : '◈'}
+              </div>
+            </section>
+
+            <StrategySection
+              strategy={selectedStrategy}
+              data={selectedData}
+            />
+
+            <ComparisonChart
+              title="Request Rate"
+              unit="requests / second"
+              series={selectedRequests}
+            />
+
+            <ComparisonChart
+              title="P95 Response Latency"
+              unit="milliseconds"
+              series={selectedLatency.map(item => ({
+                ...item,
+                values: item.values.map(point => ({
+                  ...point,
+                  value: point.value * 1000
+                }))
+              }))}
+            />
+
+            <ComparisonChart
+              title="Healthy Pod History"
+              unit="healthy pods"
+              series={selectedHealth}
+            />
+
+            <PodTable pods={selectedPods} />
+
+          </div>
+        )}
+
+        {activePage === 'canary' && <CanaryPlannedPage />}
+
+        <footer className="dashboard-footer">
+          <p>
+            DeployOps · Cloud-Native Deployment Research Platform
           </p>
-        </div>
 
-        <div className={`connection ${status === 'Live' ? 'online' : ''}`}>
-          <i />
-          {status}
-          <small>
-            {lastUpdated
-              ? `Last updated: ${lastUpdated.toLocaleTimeString()}`
-              : 'Waiting for metrics'}
-          </small>
-        </div>
-      </header>
+          <p>
+            Prometheus monitoring · 5-second refresh interval
+          </p>
+        </footer>
 
-      <section className="overview-heading">
-        <p className="panel-kicker">GLOBAL OVERVIEW</p>
-        <h2>All deployment techniques at a glance</h2>
-      </section>
-
-      <section className="stats">
-        <StatCard
-          label="Healthy Pods"
-          value={`${totals.healthy} / ${totals.total}`}
-          detail="Across all strategies"
-          tone="green"
-        />
-
-        <StatCard
-          label="Total Requests / Sec"
-          value={format(totalRps)}
-          detail="Combined application traffic"
-        />
-
-        <StatCard
-          label="Active k6 Series"
-          value={k6Metrics.length}
-          detail="Existing remote-write series"
-          tone="orange"
-        />
-      </section>
-
-      <ComparisonChart
-        title="Request Rate Comparison"
-        unit="requests / second"
-        series={requestHistory}
-      />
-
-      <ComparisonChart
-        title="P95 Latency Comparison"
-        unit="milliseconds"
-        series={latencyHistory.map(item => ({
-          ...item,
-          values: item.values.map(point => ({
-            ...point,
-            value: point.value * 1000
-          }))
-        }))}
-      />
-
-      <ComparisonChart
-        title="Healthy Pods Comparison"
-        unit="healthy pods"
-        series={healthHistory}
-      />
-
-      <section className="overview-heading">
-        <p className="panel-kicker">INDIVIDUAL STRATEGY METRICS</p>
-        <h2>Deployment-wise performance</h2>
-      </section>
-
-      {STRATEGIES.map(strategy => (
-        <StrategySection
-          key={strategy}
-          strategy={strategy}
-          data={data[strategy] || {
-            stats: {},
-            pods: []
-          }}
-        />
-      ))}
-
-      <PodTable pods={pods} />
-
-      <K6Metrics metrics={k6Metrics} />
-
-      <footer>
-        <p>Unified monitoring powered by Prometheus and React.</p>
-        <p>Refresh interval: 5 seconds</p>
-      </footer>
-    </main>
+      </main>
+    </div>
   );
 }
