@@ -1,5 +1,6 @@
 
 import StatCard from './StatCard';
+import DeploymentTimeline from './DeploymentTimeline';
 
 const STRATEGIES = {
   rolling: {
@@ -343,7 +344,7 @@ export default function StrategySection({ strategy, data = {} }) {
 
       {/* DEPLOYMENT WORKFLOW */}
 
-      <Lifecycle stages={config.stages} />
+      <DeploymentTimeline strategy={strategy} />
 
       {/* CONFIGURATION */}
 

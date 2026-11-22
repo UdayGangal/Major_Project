@@ -7,6 +7,12 @@ import ComparisonChart from './components/ComparisonChart';
 import StrategySection from './components/StrategySection';
 import PodTable from './components/PodTable';
 import K6Metrics from './components/K6Metrics';
+import AdvancedAnalytics from './components/AdvancedAnalytics';
+import ExperimentComparison from './components/ExperimentComparison';
+import InfrastructureMonitor from './components/InfrastructureMonitor';
+import AlertCentre from './components/AlertCentre';
+import ReportExport from './components/ReportExport';
+import AdaptiveAIConsole from './components/AdaptiveAIConsole';
 
 import {
   query,
@@ -490,6 +496,10 @@ export default function App() {
               />
             </section>
 
+            <InfrastructureMonitor />
+
+            <AlertCentre />
+
             <section className="overview-heading">
               <div>
                 <p className="panel-kicker">DEPLOYMENT WORKSPACES</p>
@@ -538,9 +548,20 @@ export default function App() {
               series={healthHistory}
             />
 
+            <ExperimentComparison />
+
             <PodTable pods={pods} />
 
             <K6Metrics metrics={k6Metrics} />
+
+            <ReportExport
+              data={data}
+              pods={pods}
+              k6Metrics={k6Metrics}
+              lastUpdated={lastUpdated}
+            />
+
+            <AdaptiveAIConsole stats={data.rolling?.stats || {}} />
 
           </div>
         )}
@@ -607,6 +628,8 @@ export default function App() {
             />
 
             <PodTable pods={selectedPods} />
+
+            {selectedStrategy === 'rolling' && <AdvancedAnalytics />}
 
           </div>
         )}
