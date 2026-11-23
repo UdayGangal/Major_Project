@@ -1,3 +1,4 @@
+
 import uuid
 
 from sqlalchemy import (
@@ -32,8 +33,8 @@ class DeploymentRun(Base):
     )
 
     technique = Column(String(30), nullable=False, index=True)
-    source_version = Column(String(20), default="v1", nullable=False)
-    target_version = Column(String(20), default="v2", nullable=False)
+    source_version = Column(String(100), nullable=True)
+    target_version = Column(String(100), nullable=True)
 
     status = Column(String(30), default="running", nullable=False, index=True)
 
@@ -142,3 +143,28 @@ class DeploymentLog(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+class SiteOutage(Base):
+    __tablename__ = "site_outages"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    site_url = Column(String(500), nullable=False)
+
+    status = Column(
+        String(20),
+        default="DOWN",
+        nullable=False
+    )
+
+    outage_started_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+
+    recovered_at = Column(DateTime(timezone=True), nullable=True)
+
+    downtime_seconds = Column(Float, nullable=True)
+
+    error_message = Column(Text, nullable=True)

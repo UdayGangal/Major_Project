@@ -13,6 +13,11 @@ export default defineConfig({
         target: process.env.PROMETHEUS_URL || 'http://localhost:9091',
         changeOrigin: true,
         rewrite: path => path.replace(/^\/prometheus/, '')
+      },
+
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true
       }
     }
   }

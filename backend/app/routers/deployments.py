@@ -1,16 +1,20 @@
 
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import DeploymentRun, DeploymentEvent
 from ..config import TECHNIQUES
 from ..schemas import StartRunRequest
 from ..services.collector import start_collector, stop_collector
-from pydantic import BaseModel
+from ..services.kubernetes_service import (
+    get_deployed_version,
+    KubernetesError,
+)
 
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -21,13 +25,15 @@ async def start_run(
     payload: StartRunRequest,
     db: Session = Depends(get_db)
 ):
-    if payload.technique not in TECHNIQUES:
+    technique = payload.technique
+
+    if technique not in TECHNIQUES:
         raise HTTPException(400, "Invalid technique")
 
     active = (
         db.query(DeploymentRun)
         .filter_by(
-            technique=payload.technique,
+            technique=technique,
             status="running"
         )
         .first()
@@ -39,10 +45,20 @@ async def start_run(
             f"Run already active: {active.run_id}"
         )
 
+    # Detect actual version currently serving traffic.
+    try:
+        source_version = get_deployed_version(technique)
+
+    except KubernetesError as exc:
+        raise HTTPException(
+            503,
+            f"Could not detect source version: {exc}"
+        ) from exc
+
     run = DeploymentRun(
-        technique=payload.technique,
-        source_version=payload.source_version,
-        target_version=payload.target_version,
+        technique=technique,
+        source_version=source_version,
+        target_version=None,
         application_url=payload.application_url,
         status="running"
     )
@@ -54,21 +70,26 @@ async def start_run(
         DeploymentEvent(
             run_id=run.run_id,
             event_type="RUN_STARTED",
-            message=f'{TECHNIQUES[payload.technique]["name"]} monitoring run started'
+            message=(
+                f'{TECHNIQUES[technique]["name"]} monitoring started. '
+                f'Source version detected: {source_version}'
+            )
         )
     )
 
     db.commit()
     db.refresh(run)
 
-    # Now this executes inside FastAPI's running event loop.
     start_collector(run.run_id, run.technique)
 
     return {
         "run_id": str(run.run_id),
         "technique": run.technique,
+        "source_version": run.source_version,
+        "target_version": run.target_version,
         "status": run.status,
-        "started_at": run.started_at
+        "started_at": run.started_at,
+        "completed_at": run.completed_at
     }
 
 
@@ -87,23 +108,48 @@ async def finish_run(
         raise HTTPException(404, "Run not found")
 
     if run.status == "running":
+
+        # Detect actual version serving traffic after deployment.
+        try:
+            target_version = get_deployed_version(run.technique)
+
+        except KubernetesError as exc:
+            raise HTTPException(
+                503,
+                f"Could not detect target version. "
+                f"Run remains active: {exc}"
+            ) from exc
+
+        run.target_version = target_version
         run.status = "completed"
-        run.completed_at = datetime.now(timezone.utc)
+
+        # Let PostgreSQL generate the completion timestamp.
+        run.completed_at = func.now()
 
         db.add(
             DeploymentEvent(
                 run_id=run_id,
                 event_type="RUN_FINISHED",
-                message="Monitoring run finished"
+                message=(
+                    f"Monitoring finished. "
+                    f"Source: {run.source_version}; "
+                    f"Target: {target_version}"
+                )
             )
         )
 
         db.commit()
+        db.refresh(run)
+
         stop_collector(run_id)
 
     return {
         "run_id": str(run_id),
+        "technique": run.technique,
+        "source_version": run.source_version,
+        "target_version": run.target_version,
         "status": run.status,
+        "started_at": run.started_at,
         "completed_at": run.completed_at
     }
 
@@ -131,7 +177,11 @@ def record_event(
     if payload.event_type not in allowed_events:
         raise HTTPException(400, "Unsupported event type")
 
-    run = db.query(DeploymentRun).filter_by(run_id=run_id).first()
+    run = (
+        db.query(DeploymentRun)
+        .filter_by(run_id=run_id)
+        .first()
+    )
 
     if not run:
         raise HTTPException(404, "Run not found")

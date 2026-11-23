@@ -13,6 +13,7 @@ import InfrastructureMonitor from './components/InfrastructureMonitor';
 import AlertCentre from './components/AlertCentre';
 import ReportExport from './components/ReportExport';
 import AdaptiveAIConsole from './components/AdaptiveAIConsole';
+import TrafficControl from './components/TrafficControl';
 import RunHistory from './components/RunHistory';
 
 import {
@@ -381,6 +382,8 @@ export default function App() {
                   : 'Waiting for metrics'}
               </small>
             </div>
+
+            <TrafficControl strategy={selectedStrategy} />
 
             <button
               type="button"
