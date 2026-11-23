@@ -150,21 +150,16 @@ class SiteOutage(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
 
     site_url = Column(String(500), nullable=False)
+    strategy = Column(String(30), nullable=True, index=True)
 
-    status = Column(
-        String(20),
-        default="DOWN",
-        nullable=False
-    )
+    status = Column(String(20), default="DOWN", nullable=False)
 
     outage_started_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False
+        nullable=False,
     )
 
     recovered_at = Column(DateTime(timezone=True), nullable=True)
-
     downtime_seconds = Column(Float, nullable=True)
-
     error_message = Column(Text, nullable=True)

@@ -15,6 +15,7 @@ import ReportExport from './components/ReportExport';
 import AdaptiveAIConsole from './components/AdaptiveAIConsole';
 import TrafficControl from './components/TrafficControl';
 import RunHistory from './components/RunHistory';
+import AvailabilityPanel from './components/AvailabilityPanel';
 
 import {
   query,
@@ -316,6 +317,20 @@ export default function App() {
   const selectedStrategy = STRATEGIES.includes(activePage)
     ? activePage
     : null;
+    useEffect(() => {
+  fetch('/api/availability/strategy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      strategy: selectedStrategy
+    })
+  }).catch(error => {
+    console.error('Failed to update monitored strategy:', error);
+  });
+}, [selectedStrategy]);
+
 
   const selectedData = selectedStrategy
     ? data[selectedStrategy] || { stats: {}, pods: [] }
@@ -444,6 +459,8 @@ export default function App() {
             <InfrastructureMonitor />
 
             <AlertCentre />
+
+            <AvailabilityPanel />
 
             <section className="overview-heading">
               <div>
@@ -597,7 +614,7 @@ export default function App() {
             />
 
             <PodTable pods={selectedPods} />
-
+            <AvailabilityPanel strategy={selectedStrategy} />
             {selectedStrategy === 'rolling' && <AdvancedAnalytics />}
 
           </div>
