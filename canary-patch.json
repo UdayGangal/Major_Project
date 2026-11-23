@@ -1,0 +1,24 @@
+{
+  "spec": {
+    "http": [
+      {
+        "route": [
+          {
+            "destination": {
+              "host": "canary-service",
+              "subset": "v1"
+            },
+            "weight": 90
+          },
+          {
+            "destination": {
+              "host": "canary-service",
+              "subset": "v2"
+            },
+            "weight": 10
+          }
+        ]
+      }
+    ]
+  }
+}

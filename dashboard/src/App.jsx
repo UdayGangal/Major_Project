@@ -13,6 +13,7 @@ import InfrastructureMonitor from './components/InfrastructureMonitor';
 import AlertCentre from './components/AlertCentre';
 import ReportExport from './components/ReportExport';
 import AdaptiveAIConsole from './components/AdaptiveAIConsole';
+import RunHistory from './components/RunHistory';
 
 import {
   query,
@@ -22,12 +23,18 @@ import {
   historyValues
 } from './services/prometheus';
 
-const STRATEGIES = ['rolling', 'recreate', 'blue-green'];
+const STRATEGIES = [
+  'rolling',
+  'recreate',
+  'blue-green',
+  'canary'
+];
 
 const STRATEGY_NAMES = {
   rolling: 'Rolling Update',
   recreate: 'Recreate',
-  'blue-green': 'Blue-Green'
+  'blue-green': 'Blue-Green',
+  canary: 'Canary Deployment'
 };
 
 const STRATEGY_DESCRIPTIONS = {
@@ -41,7 +48,7 @@ const STRATEGY_STATUS = {
   rolling: 'IMPLEMENTED',
   recreate: 'EXPERIMENT COMPLETED',
   'blue-green': 'EXPERIMENT PENDING',
-  canary: 'PLANNED'
+  canary: 'IMPLEMENTED'
 };
 
 const STRATEGY_COLORS = {
@@ -51,6 +58,8 @@ const STRATEGY_COLORS = {
   canary: '#9b7bea'
 };
 
+// Canary uses the same Flask metric family as the other strategies.
+// Prometheus must attach strategy="canary" to the canary-app scrape target.
 function metricQueries(strategy) {
   const selector = `{strategy="${strategy}"}`;
 
@@ -137,73 +146,6 @@ function StrategyCard({ strategy, data, onOpen }) {
         Open workspace <span>→</span>
       </span>
     </button>
-  );
-}
-
-function CanaryPlannedPage() {
-  return (
-    <div className="page-stack">
-
-      <section className="strategy-hero canary-hero">
-        <div className="strategy-hero-content">
-          <span className="strategy-hero-label">
-            DEPLOYMENT STRATEGY 04
-          </span>
-
-          <h2>Canary Deployment</h2>
-
-          <p>{STRATEGY_DESCRIPTIONS.canary}</p>
-
-          <span className="strategy-status-badge">
-            PLANNED IMPLEMENTATION
-          </span>
-        </div>
-
-        <div className="strategy-hero-symbol">◉</div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="panel-kicker">IMPLEMENTATION PLAN</p>
-            <h2>Canary Deployment Workflow</h2>
-          </div>
-        </div>
-
-        <div className="canary-steps">
-          {[
-            ['01', 'Deploy V1 and V2', 'Run both application versions.'],
-            ['02', 'Initial traffic split', 'Send a small percentage of traffic to V2.'],
-            ['03', 'Monitor performance', 'Observe error rate, latency and application health.'],
-            ['04', 'Promote or rollback', 'Increase traffic or return traffic to V1 based on approved rules.']
-          ].map(step => (
-            <div className="canary-step" key={step[0]}>
-              <span>{step[0]}</span>
-              <div>
-                <strong>{step[1]}</strong>
-                <p>{step[2]}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel pending-panel">
-        <div className="pending-indicator">i</div>
-        <div>
-          <h3>Implementation not connected yet</h3>
-          <p>
-            Istio traffic routing, percentage-based version exposure,
-            automatic promotion and rollback metrics will be connected
-            during the Canary implementation phase.
-          </p>
-          <span>
-            No live Canary measurements are reported at this stage.
-          </span>
-        </div>
-      </section>
-
-    </div>
   );
 }
 
@@ -295,7 +237,7 @@ export default function App() {
         ),
 
         queryRange(
-          'sum by (strategy) (up{strategy=~"rolling|recreate|blue-green"})',
+          'sum by (strategy) (up{strategy=~"rolling|recreate|blue-green|canary"})',
           start,
           end
         ),
@@ -517,11 +459,6 @@ export default function App() {
                 />
               ))}
 
-              <StrategyCard
-                strategy="canary"
-                data={{ stats: {} }}
-                onOpen={() => setActivePage('canary')}
-              />
             </section>
 
             <ComparisonChart
@@ -594,14 +531,43 @@ export default function App() {
                   ? '↻'
                   : selectedStrategy === 'recreate'
                     ? '⟳'
-                    : '◈'}
+                    : selectedStrategy === 'canary'
+                      ? '◉'
+                      : '◈'}
               </div>
             </section>
 
-            <StrategySection
-              strategy={selectedStrategy}
-              data={selectedData}
-            />
+            {selectedStrategy === 'canary' ? (
+              <section className="stats">
+                <StatCard
+                  label="Healthy Pods"
+                  value={`${format(selectedData.stats.healthy, 0)} / ${format(selectedData.stats.total, 0)}`}
+                  detail="Canary V1 and V2 application pods"
+                  tone="green"
+                />
+                <StatCard
+                  label="Requests / Sec"
+                  value={format(selectedData.stats.rps)}
+                  detail="Live Canary application traffic"
+                />
+                <StatCard
+                  label="5xx Error Rate"
+                  value={`${format(selectedData.stats.errors)}%`}
+                  detail="Canary application responses"
+                  tone="orange"
+                />
+                <StatCard
+                  label="P95 Latency"
+                  value={`${format(selectedData.stats.p95 * 1000)} ms`}
+                  detail="95th percentile response latency"
+                />
+              </section>
+            ) : (
+              <StrategySection
+                strategy={selectedStrategy}
+                data={selectedData}
+              />
+            )}
 
             <ComparisonChart
               title="Request Rate"
@@ -634,7 +600,6 @@ export default function App() {
           </div>
         )}
 
-        {activePage === 'canary' && <CanaryPlannedPage />}
 
         <footer className="dashboard-footer">
           <p>
