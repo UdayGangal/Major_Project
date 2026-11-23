@@ -1,0 +1,4 @@
+spec:
+  selector:
+    app: rolling-demo
+    workload: rolling

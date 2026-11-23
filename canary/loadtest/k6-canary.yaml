@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canary-k6-script
+data:
+  script.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    export const options = {
+      vus: 20,
+      duration: '15m',
+    };
+
+    const BASE_URL = 'http://istio-ingressgateway.istio-system.svc.cluster.local';
+
+    const PARAMS = {
+      headers: {
+        Host: 'canary.local',
+      },
+    };
+
+    export default function () {
+
+      const page = http.get(BASE_URL + '/', PARAMS);
+
+      check(page, {
+        'Homepage status is 200': (r) => r.status === 200,
+      });
+
+      const version = http.get(BASE_URL + '/version', PARAMS);
+
+      check(version, {
+        'Version endpoint status is 200': (r) => r.status === 200,
+        'Version is v1 or v2': (r) => {
+          try {
+            const body = JSON.parse(r.body);
+            return body.version === 'v1' || body.version === 'v2';
+          } catch (e) {
+            return false;
+          }
+        },
+      });
+
+      const health = http.get(BASE_URL + '/health', PARAMS);
+
+      check(health, {
+        'Application is healthy': (r) => r.status === 200,
+      });
+
+      sleep(0.5);
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: canary-k6
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1000
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:latest
+          command:
+            - k6
+            - run
+            - -o
+            - experimental-prometheus-rw
+            - /scripts/script.js
+          env:
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: http://prometheus:9091/api/v1/write
+          volumeMounts:
+            - name: k6-script
+              mountPath: /scripts
+      volumes:
+        - name: k6-script
+          configMap:
+            name: canary-k6-script

@@ -1,1 +1,1 @@
-{"spec":{"selector":{"app":"rolling-demo","version":"green"}}}
+{"spec":{"selector":{"app":"blue-green-demo","version":"green"}}}
