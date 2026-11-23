@@ -90,13 +90,23 @@ async def collect(run_id: UUID, technique: str):
 
                 # Store metrics in PostgreSQL
                 sample = MetricSample(
-                    run_id=run_id,
-                    technique=technique,
-                    requests_per_second=metrics["requests_per_second"],
-                    error_rate=metrics["error_rate"],
-                    p95_latency_ms=metrics["p95_latency_ms"],
-                    healthy_pods=metrics["healthy_pods"],
-                    total_pods=metrics["total_pods"],
+                run_id=run_id,
+                technique=technique,
+
+                requests_per_second=metrics["requests_per_second"],
+                total_requests=metrics["total_requests"],
+                failed_requests=metrics["failed_requests"],
+                error_rate=metrics["error_rate"],
+
+                avg_latency_ms=metrics["avg_latency_ms"],
+                p95_latency_ms=metrics["p95_latency_ms"],
+                p99_latency_ms=metrics["p99_latency_ms"],
+
+                cpu_cores=metrics["cpu_cores"],
+                memory_bytes=metrics["memory_bytes"],
+
+                healthy_pods=metrics["healthy_pods"],
+                total_pods=metrics["total_pods"],
                 )
 
                 db.add(sample)

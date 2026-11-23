@@ -9,7 +9,32 @@ COLLECTION_INTERVAL = int(os.getenv("COLLECTION_INTERVAL_SECONDS", "5"))
 LOG_TAIL = int(os.getenv("LOG_TAIL_LINES", "100"))
 CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if x.strip()]
 TECHNIQUES = {
- "rolling": {"name":"Rolling Update","selector":"app=rolling-demo","deployments":["rolling-demo"],"service":"rolling-demo-service"},
- "recreate": {"name":"Recreate","selector":"app=recreate-demo","deployments":["recreate-demo"],"service":"recreate-demo-service"},
- "blue-green": {"name":"Blue-Green","selector":"app=rolling-demo,version in (blue,green)","deployments":["blue-deployment","green-deployment"],"service":"blue-green-service"}
+    "rolling": {
+        "name": "Rolling Update",
+        "namespace": "default",
+        "selector": "app=rolling-demo",
+        "deployments": ["rolling-demo"],
+        "service": "rolling-demo-service",
+    },
+    "recreate": {
+        "name": "Recreate",
+        "namespace": "default",
+        "selector": "app=recreate-demo",
+        "deployments": ["recreate-demo"],
+        "service": "recreate-demo-service",
+    },
+    "blue-green": {
+        "name": "Blue-Green",
+        "namespace": "default",
+        "selector": "app=rolling-demo,version in (blue,green)",
+        "deployments": ["blue-deployment", "green-deployment"],
+        "service": "blue-green-service",
+    },
+    "canary": {
+        "name": "Canary",
+        "namespace": "canary",
+        "selector": "app=canary-demo",
+        "deployments": ["canary-v1", "canary-v2"],
+        "service": "canary-service",
+    },
 }

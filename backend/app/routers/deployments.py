@@ -10,6 +10,8 @@ from ..models import DeploymentRun, DeploymentEvent
 from ..config import TECHNIQUES
 from ..schemas import StartRunRequest
 from ..services.collector import start_collector, stop_collector
+from pydantic import BaseModel
+
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -103,4 +105,48 @@ async def finish_run(
         "run_id": str(run_id),
         "status": run.status,
         "completed_at": run.completed_at
+    }
+
+
+class EventRequest(BaseModel):
+    event_type: str
+    message: str = ""
+
+
+@router.post("/{run_id}/events")
+def record_event(
+    run_id: UUID,
+    payload: EventRequest,
+    db: Session = Depends(get_db),
+):
+    allowed_events = {
+        "DEPLOYMENT_STARTED",
+        "DEPLOYMENT_COMPLETED",
+        "ROLLBACK_STARTED",
+        "ROLLBACK_COMPLETED",
+        "SERVICE_UNAVAILABLE",
+        "SERVICE_RECOVERED",
+    }
+
+    if payload.event_type not in allowed_events:
+        raise HTTPException(400, "Unsupported event type")
+
+    run = db.query(DeploymentRun).filter_by(run_id=run_id).first()
+
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    event = DeploymentEvent(
+        run_id=run_id,
+        event_type=payload.event_type,
+        message=payload.message or payload.event_type,
+    )
+
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "event_type": event.event_type,
+        "created_at": event.created_at,
     }
