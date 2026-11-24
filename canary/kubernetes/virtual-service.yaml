@@ -5,7 +5,7 @@ metadata:
   namespace: canary
 spec:
   hosts:
-    - canary.local
+    - canary.localhost
   gateways:
     - canary-gateway
   http:
