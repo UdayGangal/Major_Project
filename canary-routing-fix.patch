@@ -1,0 +1,50 @@
+diff --git a/backend/app/routers/traffic.py b/backend/app/routers/traffic.py
+--- a/backend/app/routers/traffic.py
++++ b/backend/app/routers/traffic.py
+@@ -2,5 +2,5 @@
+         target_url = (
+             "http://istio-ingressgateway.istio-system.svc.cluster.local/"
+         )
+-        headers = 'headers: { Host: "canary.local" },'
++        headers = 'headers: { Host: "canary.localhost" },'
+     else:
+diff --git a/canary/loadtest/k6-canary.yaml b/canary/loadtest/k6-canary.yaml
+--- a/canary/loadtest/k6-canary.yaml
++++ b/canary/loadtest/k6-canary.yaml
+@@ -16,7 +16,7 @@
+ 
+     const PARAMS = {
+       headers: {
+-        Host: 'canary.local',
++        Host: 'canary.localhost',
+       },
+     };
+ 
+@@ -72,7 +72,7 @@
+             - /scripts/script.js
+           env:
+             - name: K6_PROMETHEUS_RW_SERVER_URL
+-              value: http://prometheus:9091/api/v1/write
++              value: http://prometheus.default.svc.cluster.local:9090/api/v1/write
+           volumeMounts:
+             - name: k6-script
+               mountPath: /scripts
+diff --git a/canary/kubernetes/gateway.yaml b/canary/kubernetes/gateway.yaml
+--- a/canary/kubernetes/gateway.yaml
++++ b/canary/kubernetes/gateway.yaml
+@@ -13,3 +13,4 @@
+         protocol: HTTP
+       hosts:
+         - canary.localhost
++        - localhost
+diff --git a/canary/kubernetes/virtual-service.yaml b/canary/kubernetes/virtual-service.yaml
+--- a/canary/kubernetes/virtual-service.yaml
++++ b/canary/kubernetes/virtual-service.yaml
+@@ -6,6 +6,7 @@
+ spec:
+   hosts:
+     - canary.localhost
++    - localhost
+   gateways:
+     - canary-gateway
+   http:
