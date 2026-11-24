@@ -15,6 +15,7 @@ TECHNIQUES = {
         "selector": "app=rolling-demo",
         "deployments": ["rolling-demo"],
         "service": "rolling-demo-service",
+        "local_port": 8081,
     },
     "recreate": {
         "name": "Recreate",
@@ -22,13 +23,15 @@ TECHNIQUES = {
         "selector": "app=recreate-demo",
         "deployments": ["recreate-demo"],
         "service": "recreate-demo-service",
+        "local_port": 8082,
     },
     "blue-green": {
         "name": "Blue-Green",
         "namespace": "default",
-        "selector": "app=rolling-demo,version in (blue,green)",
+        "selector": "app=blue-green-demo",
         "deployments": ["blue-deployment", "green-deployment"],
         "service": "blue-green-service",
+        "local_port": 8083,
     },
     "canary": {
         "name": "Canary",
@@ -36,5 +39,6 @@ TECHNIQUES = {
         "selector": "app=canary-demo",
         "deployments": ["canary-v1", "canary-v2"],
         "service": "canary-service",
+        "local_port": 8084,
     },
 }

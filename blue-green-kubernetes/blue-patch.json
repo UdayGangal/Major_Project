@@ -1,1 +1,8 @@
-{"spec":{"selector":{"app":"blue-green-demo","version":"blue"}}}
+{
+  "spec": {
+    "selector": {
+      "app": "blue-green-demo",
+      "version": "blue"
+    }
+  }
+}

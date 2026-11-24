@@ -1,3 +1,4 @@
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,8 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import CORS_ORIGINS
 from .database import Base, engine
 from .routers import (
-    system, analytics, deployments, logs,
-    history, traffic, availability
+    system,
+    analytics,
+    deployments,
+    logs,
+    history,
+    traffic,
+    availability,
 )
 from .services.port_forward_manager import port_forward_manager
 from .services.availability_monitor import availability_monitor
@@ -30,7 +36,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Deployment Analytics API",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -38,7 +44,7 @@ app.add_middleware(
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 app.include_router(system.router)

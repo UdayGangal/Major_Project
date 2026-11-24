@@ -1,0 +1,4 @@
+spec:
+  selector:
+    app: blue-green-demo
+    version: green

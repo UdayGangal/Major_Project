@@ -317,19 +317,6 @@ export default function App() {
   const selectedStrategy = STRATEGIES.includes(activePage)
     ? activePage
     : null;
-    useEffect(() => {
-  fetch('/api/availability/strategy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      strategy: selectedStrategy
-    })
-  }).catch(error => {
-    console.error('Failed to update monitored strategy:', error);
-  });
-}, [selectedStrategy]);
 
 
   const selectedData = selectedStrategy

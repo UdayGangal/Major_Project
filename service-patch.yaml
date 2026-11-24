@@ -1,4 +1,4 @@
 spec:
   selector:
-    app: rolling-demo
-    workload: rolling
+    app: blue-green-demo
+    version: blue

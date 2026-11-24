@@ -4,7 +4,7 @@ metadata:
   name: blue-green-service
 spec:
   selector:
-    app: rolling-demo
+    app: blue-green-demo
     version: blue
   ports:
     - name: http
