@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     Integer,
     DateTime,
+    Boolean,
     ForeignKey,
     UniqueConstraint,
     Index,
@@ -144,10 +145,18 @@ class DeploymentLog(Base):
         nullable=False,
     )
 
+
 class SiteOutage(Base):
     __tablename__ = "site_outages"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_runs.run_id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
 
     site_url = Column(String(500), nullable=False)
     strategy = Column(String(30), nullable=True, index=True)
@@ -163,3 +172,39 @@ class SiteOutage(Base):
     recovered_at = Column(DateTime(timezone=True), nullable=True)
     downtime_seconds = Column(Float, nullable=True)
     error_message = Column(Text, nullable=True)
+
+
+class AvailabilityResult(Base):
+    __tablename__ = "availability_results"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("deployment_runs.run_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    technique = Column(String(30), nullable=False, index=True)
+
+    monitoring_started_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    monitoring_ended_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    total_checks = Column(Integer, default=0, nullable=False)
+    failed_checks = Column(Integer, default=0, nullable=False)
+    outage_count = Column(Integer, default=0, nullable=False)
+
+    total_downtime_seconds = Column(Float, default=0.0, nullable=False)
+
+    zero_downtime = Column(Boolean, nullable=True)
+
+    status = Column(String(20), default="RUNNING", nullable=False)

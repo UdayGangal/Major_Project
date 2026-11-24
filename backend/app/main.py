@@ -24,12 +24,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     await port_forward_manager.start()
-    await availability_monitor.start()
 
     try:
         yield
     finally:
-        await availability_monitor.stop()
+        await availability_monitor.stop_all()
         await port_forward_manager.stop()
 
 

@@ -1,16 +1,19 @@
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import DeploymentRun, DeploymentEvent
 from ..config import TECHNIQUES
 from ..schemas import StartRunRequest
+from ..services.kubernetes_service import get_pod_versions
 from ..services.collector import start_collector, stop_collector
+from ..services.availability_monitor import availability_monitor
+
 from ..services.kubernetes_service import (
     get_deployed_version,
     KubernetesError,
@@ -32,10 +35,7 @@ async def start_run(
 
     active = (
         db.query(DeploymentRun)
-        .filter_by(
-            technique=technique,
-            status="running"
-        )
+        .filter_by(technique=technique, status="running")
         .first()
     )
 
@@ -45,10 +45,9 @@ async def start_run(
             f"Run already active: {active.run_id}"
         )
 
-    # Detect actual version currently serving traffic.
+    # Detect the actual version currently serving traffic.
     try:
         source_version = get_deployed_version(technique)
-
     except KubernetesError as exc:
         raise HTTPException(
             503,
@@ -58,7 +57,7 @@ async def start_run(
     run = DeploymentRun(
         technique=technique,
         source_version=source_version,
-        target_version=None,
+        target_version="pending",
         application_url=payload.application_url,
         status="running"
     )
@@ -81,6 +80,16 @@ async def start_run(
     db.refresh(run)
 
     start_collector(run.run_id, run.technique)
+    try:
+        await availability_monitor.start(run.technique, run.run_id)
+    except Exception as exc:
+        run.status = "failed"
+        db.commit()
+        stop_collector(run.run_id)
+        raise HTTPException(
+            500,
+        f"Could not start availability monitoring: {exc}"
+    ) from exc
 
     return {
         "run_id": str(run.run_id),
@@ -88,8 +97,7 @@ async def start_run(
         "source_version": run.source_version,
         "target_version": run.target_version,
         "status": run.status,
-        "started_at": run.started_at,
-        "completed_at": run.completed_at
+        "started_at": run.started_at
     }
 
 
@@ -109,22 +117,18 @@ async def finish_run(
 
     if run.status == "running":
 
-        # Detect actual version serving traffic after deployment.
+        # Detect the actual version serving traffic after deployment.
         try:
             target_version = get_deployed_version(run.technique)
-
         except KubernetesError as exc:
             raise HTTPException(
                 503,
-                f"Could not detect target version. "
-                f"Run remains active: {exc}"
+                f"Could not detect target version. Run remains active: {exc}"
             ) from exc
 
         run.target_version = target_version
         run.status = "completed"
-
-        # Let PostgreSQL generate the completion timestamp.
-        run.completed_at = func.now()
+        run.completed_at = datetime.now(timezone.utc)
 
         db.add(
             DeploymentEvent(
@@ -142,6 +146,7 @@ async def finish_run(
         db.refresh(run)
 
         stop_collector(run_id)
+        await availability_monitor.stop(run.technique, run.run_id)
 
     return {
         "run_id": str(run_id),
@@ -149,7 +154,6 @@ async def finish_run(
         "source_version": run.source_version,
         "target_version": run.target_version,
         "status": run.status,
-        "started_at": run.started_at,
         "completed_at": run.completed_at
     }
 
@@ -177,11 +181,7 @@ def record_event(
     if payload.event_type not in allowed_events:
         raise HTTPException(400, "Unsupported event type")
 
-    run = (
-        db.query(DeploymentRun)
-        .filter_by(run_id=run_id)
-        .first()
-    )
+    run = db.query(DeploymentRun).filter_by(run_id=run_id).first()
 
     if not run:
         raise HTTPException(404, "Run not found")

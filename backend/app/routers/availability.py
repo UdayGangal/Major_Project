@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import SiteOutage
+from ..models import SiteOutage, AvailabilityResult
 from ..config import TECHNIQUES, KUBECTL_BIN
 from ..services.port_forward_manager import port_forward_manager
 
@@ -36,6 +36,44 @@ def get_strategy_url(strategy: str):
     }
 
 
+@router.get("/results")
+def get_availability_results(
+    strategy: str = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    if strategy is not None and strategy not in TECHNIQUES:
+        raise HTTPException(400, "Invalid strategy")
+
+    query = db.query(AvailabilityResult)
+
+    if strategy:
+        query = query.filter(AvailabilityResult.technique == strategy)
+
+    rows = (
+        query
+        .order_by(AvailabilityResult.monitoring_started_at.desc())
+        .limit(min(max(limit, 1), 500))
+        .all()
+    )
+
+    return [
+        {
+            "run_id": str(row.run_id),
+            "strategy": row.technique,
+            "monitoring_started_at": row.monitoring_started_at,
+            "monitoring_ended_at": row.monitoring_ended_at,
+            "total_checks": row.total_checks,
+            "failed_checks": row.failed_checks,
+            "outage_count": row.outage_count,
+            "total_downtime_seconds": row.total_downtime_seconds,
+            "zero_downtime": row.zero_downtime,
+            "status": row.status,
+        }
+        for row in rows
+    ]
+
+
 @router.get("/outages")
 def get_outages(
     strategy: str = None,
@@ -60,6 +98,7 @@ def get_outages(
     return [
         {
             "id": row.id,
+            "run_id": str(row.run_id) if row.run_id else None,
             "strategy": row.strategy,
             "site_url": row.site_url,
             "status": row.status,
@@ -74,25 +113,31 @@ def get_outages(
 
 @router.get("/status")
 def get_availability_status(db: Session = Depends(get_db)):
-    latest = (
-        db.query(SiteOutage)
-        .filter(SiteOutage.strategy == "rolling")
-        .order_by(SiteOutage.outage_started_at.desc())
-        .first()
+    results = (
+        db.query(AvailabilityResult)
+        .order_by(AvailabilityResult.monitoring_started_at.desc())
+        .all()
     )
 
-    if latest and latest.recovered_at is None:
-        return {
-            "status": "DOWN",
-            "outage_started_at": latest.outage_started_at,
-            "website_url": "http://localhost:8081",
-            "strategy": "rolling",
-        }
+    latest_by_strategy = {}
+
+    for row in results:
+        if row.technique not in latest_by_strategy:
+            latest_by_strategy[row.technique] = row
 
     return {
-        "status": "UP",
-        "website_url": "http://localhost:8081",
-        "strategy": "rolling",
+        strategy: {
+            "run_id": str(row.run_id),
+            "status": row.status,
+            "total_checks": row.total_checks,
+            "failed_checks": row.failed_checks,
+            "outage_count": row.outage_count,
+            "total_downtime_seconds": row.total_downtime_seconds,
+            "zero_downtime": row.zero_downtime,
+            "monitoring_started_at": row.monitoring_started_at,
+            "monitoring_ended_at": row.monitoring_ended_at,
+        }
+        for strategy, row in latest_by_strategy.items()
     }
 
 
