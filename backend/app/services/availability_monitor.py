@@ -2,9 +2,8 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+
 from urllib.request import urlopen
-from urllib.error import URLError
-from uuid import UUID
 
 from ..config import TECHNIQUES
 from ..database import SessionLocal
@@ -20,7 +19,9 @@ FAILURE_THRESHOLD = 2
 def check_website(url):
     try:
         with urlopen(url, timeout=REQUEST_TIMEOUT) as response:
-            return 200 <= response.status < 300, None
+            if 200 <= response.status < 300:
+                return True, None
+            return False, f"HTTP {response.status}"
     except Exception as exc:
         return False, str(exc)
 
@@ -42,11 +43,11 @@ class StrategyMonitor:
         self.total_checks = 0
         self.failed_checks = 0
         self.outage_count = 0
-        self.total_downtime_seconds = 0.0
+        self.completed_downtime = 0.0
 
         self.started_at = datetime.now(timezone.utc)
 
-    def create_result(self):
+    def _create_result(self):
         db = SessionLocal()
         try:
             result = AvailabilityResult(
@@ -64,21 +65,29 @@ class StrategyMonitor:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("Could not create availability result")
+            logger.exception(
+                "Could not create availability result for %s",
+                self.strategy,
+            )
             raise
         finally:
             db.close()
 
     async def start(self):
-        self.create_result()
+        self._create_result()
         self.task = asyncio.create_task(self._run())
-        logger.info("Availability monitoring started: %s", self.strategy)
+        logger.info(
+            "Availability monitor started: %s, run=%s",
+            self.strategy,
+            self.run_id,
+        )
 
     async def _run(self):
         while True:
             try:
                 healthy, error = await asyncio.to_thread(
-                    check_website, self.url
+                    check_website,
+                    self.url,
                 )
                 now = datetime.now(timezone.utc)
 
@@ -89,6 +98,9 @@ class StrategyMonitor:
 
                     if self.is_down:
                         self._record_recovery(now)
+                    else:
+                        self.first_failure_at = None
+
                 else:
                     self.failed_checks += 1
 
@@ -101,13 +113,19 @@ class StrategyMonitor:
                         self.failure_count >= FAILURE_THRESHOLD
                         and not self.is_down
                     ):
-                        self._record_outage(self.first_failure_at, error)
+                        self._record_outage(
+                            self.first_failure_at,
+                            error,
+                        )
+
+                self._save_live_progress(now)
 
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception(
-                    "Availability check failed for %s", self.strategy
+                    "Monitor error for strategy %s",
+                    self.strategy,
                 )
 
             await asyncio.sleep(CHECK_INTERVAL)
@@ -123,6 +141,7 @@ class StrategyMonitor:
                 outage_started_at=started_at,
                 error_message=error,
             )
+
             db.add(outage)
             db.commit()
             db.refresh(outage)
@@ -132,13 +151,18 @@ class StrategyMonitor:
             self.outage_count += 1
 
             logger.warning(
-                "%s outage recorded for run %s",
+                "%s is DOWN. Outage ID=%s, run=%s",
                 self.strategy,
+                outage.id,
                 self.run_id,
             )
+
         except Exception:
             db.rollback()
-            logger.exception("Could not save outage for %s", self.strategy)
+            logger.exception(
+                "Could not save outage for %s",
+                self.strategy,
+            )
         finally:
             db.close()
 
@@ -159,12 +183,19 @@ class StrategyMonitor:
             if outage and outage.recovered_at is None:
                 outage.recovered_at = recovered_at
                 outage.status = "RECOVERED"
-                outage.downtime_seconds = (
-                    recovered_at - outage.outage_started_at
-                ).total_seconds()
+                outage.downtime_seconds = max(
+                    0.0,
+                    (recovered_at - outage.outage_started_at).total_seconds(),
+                )
 
-                self.total_downtime_seconds += outage.downtime_seconds
+                self.completed_downtime += outage.downtime_seconds
                 db.commit()
+
+                logger.info(
+                    "%s recovered after %.2f seconds",
+                    self.strategy,
+                    outage.downtime_seconds,
+                )
 
             self.is_down = False
             self.outage_id = None
@@ -172,24 +203,92 @@ class StrategyMonitor:
 
         except Exception:
             db.rollback()
-            logger.exception("Could not save recovery for %s", self.strategy)
+            logger.exception(
+                "Could not save recovery for %s",
+                self.strategy,
+            )
+        finally:
+            db.close()
+
+    def _save_live_progress(self, now):
+        active_downtime = 0.0
+
+        db = SessionLocal()
+        try:
+            if self.is_down and self.outage_id is not None:
+                outage = (
+                    db.query(SiteOutage)
+                    .filter(SiteOutage.id == self.outage_id)
+                    .first()
+                )
+
+                if outage and outage.recovered_at is None:
+                    active_downtime = max(
+                        0.0,
+                        (now - outage.outage_started_at).total_seconds(),
+                    )
+                    outage.downtime_seconds = active_downtime
+
+            result = (
+                db.query(AvailabilityResult)
+                .filter(AvailabilityResult.run_id == self.run_id)
+                .first()
+            )
+
+            if result:
+                result.total_checks = self.total_checks
+                result.failed_checks = self.failed_checks
+                result.outage_count = self.outage_count
+                result.total_downtime_seconds = (
+                    self.completed_downtime + active_downtime
+                )
+
+                # Once an outage has happened, zero downtime is false.
+                result.zero_downtime = (
+                    False if self.outage_count > 0 else None
+                )
+
+                result.status = "RUNNING"
+
+            db.commit()
+
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Could not update live availability for %s",
+                self.strategy,
+            )
         finally:
             db.close()
 
     async def stop(self):
         if self.task:
             self.task.cancel()
-            await asyncio.gather(self.task, return_exceptions=True)
+            await asyncio.gather(
+                self.task,
+                return_exceptions=True,
+            )
             self.task = None
 
         ended_at = datetime.now(timezone.utc)
-
-        # Close an outage that is still active when the run finishes.
-        if self.is_down and self.outage_id is not None:
-            self._record_recovery(ended_at)
+        active_downtime = 0.0
 
         db = SessionLocal()
         try:
+            if self.is_down and self.outage_id is not None:
+                outage = (
+                    db.query(SiteOutage)
+                    .filter(SiteOutage.id == self.outage_id)
+                    .first()
+                )
+
+                if outage and outage.recovered_at is None:
+                    active_downtime = max(
+                        0.0,
+                        (ended_at - outage.outage_started_at).total_seconds(),
+                    )
+                    outage.downtime_seconds = active_downtime
+
             result = (
                 db.query(AvailabilityResult)
                 .filter(AvailabilityResult.run_id == self.run_id)
@@ -201,20 +300,29 @@ class StrategyMonitor:
                 result.total_checks = self.total_checks
                 result.failed_checks = self.failed_checks
                 result.outage_count = self.outage_count
-                result.total_downtime_seconds = self.total_downtime_seconds
+                result.total_downtime_seconds = (
+                    self.completed_downtime + active_downtime
+                )
                 result.zero_downtime = self.outage_count == 0
                 result.status = "COMPLETED"
 
-                db.commit()
+            db.commit()
 
         except Exception:
             db.rollback()
-            logger.exception("Could not finalize availability result")
+            logger.exception(
+                "Could not finalize availability for %s",
+                self.strategy,
+            )
             raise
         finally:
             db.close()
 
-        logger.info("Availability monitoring finished: %s", self.strategy)
+        logger.info(
+            "Availability monitor stopped: %s, run=%s",
+            self.strategy,
+            self.run_id,
+        )
 
 
 class AvailabilityMonitor:
@@ -224,7 +332,7 @@ class AvailabilityMonitor:
     async def start(self, strategy, run_id):
         if strategy in self.monitors:
             raise RuntimeError(
-                f"Availability monitor already running for {strategy}"
+                f"Monitor already running for {strategy}"
             )
 
         monitor = StrategyMonitor(strategy, run_id)
@@ -236,12 +344,12 @@ class AvailabilityMonitor:
 
         if monitor and monitor.run_id == run_id:
             await monitor.stop()
-            del self.monitors[strategy]
+            self.monitors.pop(strategy, None)
 
     async def stop_all(self):
         for strategy, monitor in list(self.monitors.items()):
             await monitor.stop()
-            del self.monitors[strategy]
+            self.monitors.pop(strategy, None)
 
 
 availability_monitor = AvailabilityMonitor()

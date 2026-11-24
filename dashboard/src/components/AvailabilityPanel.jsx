@@ -1,6 +1,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+const STRATEGIES = [
+  'rolling',
+  'recreate',
+  'blue-green',
+  'canary'
+];
+
 const STRATEGY_NAMES = {
   rolling: 'Rolling Update',
   recreate: 'Recreate',
@@ -9,7 +16,9 @@ const STRATEGY_NAMES = {
 };
 
 function formatDuration(seconds) {
-  if (seconds == null || !Number.isFinite(Number(seconds))) return '—';
+  if (seconds == null || !Number.isFinite(Number(seconds))) {
+    return '—';
+  }
 
   const total = Math.max(0, Math.floor(Number(seconds)));
   const hours = Math.floor(total / 3600);
@@ -25,13 +34,14 @@ function formatDate(value) {
   if (!value) return '—';
 
   const date = new Date(value);
+
   return Number.isNaN(date.getTime())
     ? '—'
     : date.toLocaleString();
 }
 
 export default function AvailabilityPanel({ strategy = null }) {
-  const [monitor, setMonitor] = useState(null);
+  const [statuses, setStatuses] = useState({});
   const [outages, setOutages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,7 +55,7 @@ export default function AvailabilityPanel({ strategy = null }) {
       }
 
       const [statusResponse, outagesResponse] = await Promise.all([
-        fetch('/api/availability/status'),
+        fetch(`/api/availability/status?${params.toString()}`),
         fetch(`/api/availability/outages?${params.toString()}`)
       ]);
 
@@ -60,13 +70,8 @@ export default function AvailabilityPanel({ strategy = null }) {
       const statusData = await statusResponse.json();
       const outagesData = await outagesResponse.json();
 
-      setMonitor(statusData);
-      setOutages(
-        Array.isArray(outagesData)
-          ? outagesData
-          : outagesData.outages || []
-      );
-
+      setStatuses(statusData || {});
+      setOutages(Array.isArray(outagesData) ? outagesData : []);
       setError('');
     } catch (err) {
       console.error('Availability fetch failed:', err);
@@ -80,38 +85,12 @@ export default function AvailabilityPanel({ strategy = null }) {
     setLoading(true);
     fetchAvailability();
 
-    const timer = setInterval(fetchAvailability, 3000);
+    const timer = setInterval(fetchAvailability, 2000);
 
     return () => clearInterval(timer);
   }, [fetchAvailability]);
 
-  const isDown =
-    monitor?.is_down === true ||
-    monitor?.status === 'DOWN';
-
-  const currentStartedAt =
-    monitor?.outage_started_at ||
-    monitor?.current_outage_started_at;
-
-  const activeDuration = isDown && currentStartedAt
-    ? Math.max(
-        0,
-        (Date.now() - new Date(currentStartedAt).getTime()) / 1000
-      )
-    : 0;
-
-  const completedDowntime = outages.reduce(
-    (total, outage) => total + Number(outage.downtime_seconds || 0),
-    0
-  );
-
-  const totalDowntime = completedDowntime + activeDuration;
-
-  const downCount = outages.length ;
-
-  const filteredOutages = outages.filter(outage => {
-    return !strategy || !outage.strategy || outage.strategy === strategy;
-  });
+  const visibleStrategies = strategy ? [strategy] : STRATEGIES;
 
   return (
     <section className="availability-panel">
@@ -120,18 +99,17 @@ export default function AvailabilityPanel({ strategy = null }) {
           <p className="panel-kicker">HTTP AVAILABILITY MONITOR</p>
           <h2>Service Availability & Downtime</h2>
           <p className="availability-subtitle">
-            Actual application HTTP health checks and recorded outages
+            Independent live health monitoring for each deployment strategy
           </p>
         </div>
 
-        <div className={`availability-status ${isDown ? 'down' : 'up'}`}>
-          <span className="availability-status-dot" />
-          {loading
-            ? 'Checking...'
-            : isDown
-              ? 'SERVICE DOWN'
-              : 'SERVICE AVAILABLE'}
-        </div>
+        <button
+          type="button"
+          className="availability-refresh"
+          onClick={fetchAvailability}
+        >
+          ↻ Refresh
+        </button>
       </div>
 
       {error && (
@@ -140,111 +118,181 @@ export default function AvailabilityPanel({ strategy = null }) {
         </div>
       )}
 
-      <div className="availability-stats">
-        <div className="availability-stat">
-          <span>Current Status</span>
-          <strong className={isDown ? 'text-down' : 'text-up'}>
-            {loading ? '—' : isDown ? 'DOWN' : 'UP'}
-          </strong>
-          <small>
-            {monitor?.strategy
-              ? STRATEGY_NAMES[monitor.strategy] || monitor.strategy
-              : strategy
-                ? STRATEGY_NAMES[strategy]
-                : 'Currently monitored strategy'}
-          </small>
-        </div>
+      <div className="availability-strategy-grid">
+        {visibleStrategies.map(currentStrategy => {
+          const item = statuses[currentStrategy] || {};
+          const isDown = item.is_down === true;
 
-        <div className="availability-stat">
-          <span>Total Outages</span>
-          <strong>{loading ? '—' : downCount}</strong>
-          <small>Recorded incidents</small>
-        </div>
+          const activeDuration =
+            isDown && item.outage_started_at
+              ? Math.max(
+                  0,
+                  (Date.now() - new Date(item.outage_started_at).getTime()) / 1000
+                )
+              : 0;
 
-        <div className="availability-stat">
-          <span>Total Downtime</span>
-          <strong>{loading ? '—' : formatDuration(totalDowntime)}</strong>
-          <small>Including an ongoing outage</small>
-        </div>
+          const totalDowntime = Number(
+            item.total_downtime_seconds || 0
+          );
 
-        <div className="availability-stat">
-          <span>Current Outage</span>
-          <strong>{isDown ? formatDuration(activeDuration) : '—'}</strong>
-          <small>{isDown ? 'Ongoing downtime' : 'No active outage'}</small>
-        </div>
-      </div>
+          const strategyOutages = outages.filter(
+            outage => outage.strategy === currentStrategy
+          );
 
-      <div className="availability-history">
-        <div className="availability-history-heading">
-          <div>
-            <h3>Outage History</h3>
-            <p>
-              {strategy
-                ? `Incidents for ${STRATEGY_NAMES[strategy] || strategy}`
-                : 'Incidents across monitored strategies'}
-            </p>
-          </div>
+          return (
+            <div
+              className="availability-strategy-card"
+              key={currentStrategy}
+            >
+              <div className="availability-header">
+                <div>
+                  <p className="panel-kicker">
+                    {STRATEGY_NAMES[currentStrategy]}
+                  </p>
+                  <h3>
+                    {loading
+                      ? 'Checking...'
+                      : isDown
+                        ? 'SERVICE DOWN'
+                        : item.monitoring_active
+                          ? 'SERVICE UP'
+                          : item.status === 'COMPLETED'
+                            ? 'MONITORING COMPLETED'
+                            : 'NOT MONITORED'}
+                  </h3>
+                </div>
 
-          <button
-            type="button"
-            className="availability-refresh"
-            onClick={fetchAvailability}
-          >
-            ↻ Refresh
-          </button>
-        </div>
+                <span
+                  className={`availability-status ${isDown ? 'down' : 'up'}`}
+                >
+                  <span className="availability-status-dot" />
+                  {isDown ? 'DOWN' : 'UP'}
+                </span>
+              </div>
 
-        {filteredOutages.length === 0 ? (
-          <div className="availability-empty">
-            {loading
-              ? 'Loading outage records...'
-              : 'No outage records found.'}
-          </div>
-        ) : (
-          <div className="availability-table-wrap">
-            <table className="availability-table">
-              <thead>
-                <tr>
-                  <th>Strategy</th>
-                  <th>Outage Started</th>
-                  <th>Recovered At</th>
-                  <th>Duration</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
+              <div className="availability-stats">
+                <div className="availability-stat">
+                  <span>Current Status</span>
+                  <strong className={isDown ? 'text-down' : 'text-up'}>
+                    {isDown ? 'DOWN' : 'UP'}
+                  </strong>
+                  <small>
+                    {item.monitoring_active
+                      ? 'Live monitoring'
+                      : item.status === 'COMPLETED'
+                        ? 'Last run completed'
+                        : 'No active run'}
+                  </small>
+                </div>
 
-              <tbody>
-                {filteredOutages.map(outage => {
-                  const active =
-                    outage.status === 'DOWN' ||
-                    !outage.recovered_at;
+                <div className="availability-stat">
+                  <span>Total Outages</span>
+                  <strong>{item.outage_count ?? 0}</strong>
+                  <small>For this deployment run</small>
+                </div>
 
-                  const duration = active && outage.outage_started_at
-                    ? (Date.now() - new Date(outage.outage_started_at).getTime()) / 1000
-                    : outage.downtime_seconds;
+                <div className="availability-stat">
+                  <span>Total Downtime</span>
+                  <strong>
+                    {formatDuration(totalDowntime)}
+                  </strong>
+                  <small>Recorded for this run</small>
+                </div>
 
-                  return (
-                    <tr key={outage.id}>
-                      <td>
-                        {STRATEGY_NAMES[outage.strategy] ||
-                          outage.strategy ||
-                          '—'}
-                      </td>
-                      <td>{formatDate(outage.outage_started_at)}</td>
-                      <td>{formatDate(outage.recovered_at)}</td>
-                      <td>{formatDuration(duration)}</td>
-                      <td>
-                        <span className={`outage-badge ${active ? 'outage-active' : 'outage-recovered'}`}>
-                          {active ? 'DOWN' : 'RECOVERED'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                <div className="availability-stat">
+                  <span>Current Outage</span>
+                  <strong>
+                    {isDown
+                      ? formatDuration(activeDuration)
+                      : '—'}
+                  </strong>
+                  <small>
+                    {isDown
+                      ? `Since ${formatDate(item.outage_started_at)}`
+                      : 'No active outage'}
+                  </small>
+                </div>
+
+                <div className="availability-stat">
+                  <span>Health Checks</span>
+                  <strong>{item.total_checks ?? 0}</strong>
+                  <small>
+                    {item.failed_checks ?? 0} failed checks
+                  </small>
+                </div>
+
+                <div className="availability-stat">
+                  <span>Last Recovery</span>
+                  <strong>
+                    {formatDate(item.last_recovered_at)}
+                  </strong>
+                  <small>Most recent recovery in this run</small>
+                </div>
+              </div>
+
+              <div className="availability-history">
+                <h3>Outage History</h3>
+
+                {strategyOutages.length === 0 ? (
+                  <div className="availability-empty">
+                    No outage records for this strategy.
+                  </div>
+                ) : (
+                  <div className="availability-table-wrap">
+                    <table className="availability-table">
+                      <thead>
+                        <tr>
+                          <th>Outage Started</th>
+                          <th>Recovered At</th>
+                          <th>Duration</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {strategyOutages.map(outage => {
+                          const active =
+                            outage.status === 'DOWN' ||
+                            !outage.recovered_at;
+
+                          const duration = active
+                            ? (
+                                Date.now() -
+                                new Date(outage.outage_started_at).getTime()
+                              ) / 1000
+                            : outage.downtime_seconds;
+
+                          return (
+                            <tr key={outage.id}>
+                              <td>
+                                {formatDate(outage.outage_started_at)}
+                              </td>
+                              <td>
+                                {formatDate(outage.recovered_at)}
+                              </td>
+                              <td>{formatDuration(duration)}</td>
+                              <td>
+                                <span
+                                  className={`outage-badge ${
+                                    active
+                                      ? 'outage-active'
+                                      : 'outage-recovered'
+                                  }`}
+                                >
+                                  {active ? 'DOWN' : 'RECOVERED'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

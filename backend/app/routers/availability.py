@@ -36,6 +36,91 @@ def get_strategy_url(strategy: str):
     }
 
 
+@router.get("/status")
+def get_availability_status(
+    strategy: str = None,
+    db: Session = Depends(get_db),
+):
+    if strategy is not None and strategy not in TECHNIQUES:
+        raise HTTPException(400, "Invalid strategy")
+
+    strategies = [strategy] if strategy else list(TECHNIQUES.keys())
+    response = {}
+
+    for current_strategy in strategies:
+        result = (
+            db.query(AvailabilityResult)
+            .filter(AvailabilityResult.technique == current_strategy)
+            .order_by(AvailabilityResult.monitoring_started_at.desc())
+            .first()
+        )
+
+        if not result:
+            response[current_strategy] = {
+                "strategy": current_strategy,
+                "monitoring_active": False,
+                "site_status": "NOT_MONITORED",
+                "is_down": False,
+                "run_id": None,
+                "outage_started_at": None,
+                "last_recovered_at": None,
+                "total_checks": 0,
+                "failed_checks": 0,
+                "outage_count": 0,
+                "total_downtime_seconds": 0.0,
+                "zero_downtime": None,
+                "status": "NOT_STARTED",
+            }
+            continue
+
+        active_outage = (
+            db.query(SiteOutage)
+            .filter(
+                SiteOutage.run_id == result.run_id,
+                SiteOutage.status == "DOWN",
+                SiteOutage.recovered_at.is_(None),
+            )
+            .order_by(SiteOutage.outage_started_at.desc())
+            .first()
+        )
+
+        last_recovery = (
+            db.query(SiteOutage)
+            .filter(
+                SiteOutage.run_id == result.run_id,
+                SiteOutage.recovered_at.isnot(None),
+            )
+            .order_by(SiteOutage.recovered_at.desc())
+            .first()
+        )
+
+        is_down = active_outage is not None
+
+        response[current_strategy] = {
+            "strategy": current_strategy,
+            "monitoring_active": result.status == "RUNNING",
+            "site_status": "DOWN" if is_down else "UP",
+            "is_down": is_down,
+            "run_id": str(result.run_id),
+            "outage_started_at": (
+                active_outage.outage_started_at if active_outage else None
+            ),
+            "last_recovered_at": (
+                last_recovery.recovered_at if last_recovery else None
+            ),
+            "total_checks": result.total_checks,
+            "failed_checks": result.failed_checks,
+            "outage_count": result.outage_count,
+            "total_downtime_seconds": result.total_downtime_seconds,
+            "zero_downtime": result.zero_downtime,
+            "monitoring_started_at": result.monitoring_started_at,
+            "monitoring_ended_at": result.monitoring_ended_at,
+            "status": result.status,
+        }
+
+    return response
+
+
 @router.get("/results")
 def get_availability_results(
     strategy: str = None,
@@ -48,7 +133,9 @@ def get_availability_results(
     query = db.query(AvailabilityResult)
 
     if strategy:
-        query = query.filter(AvailabilityResult.technique == strategy)
+        query = query.filter(
+            AvailabilityResult.technique == strategy
+        )
 
     rows = (
         query
@@ -109,36 +196,6 @@ def get_outages(
         }
         for row in rows
     ]
-
-
-@router.get("/status")
-def get_availability_status(db: Session = Depends(get_db)):
-    results = (
-        db.query(AvailabilityResult)
-        .order_by(AvailabilityResult.monitoring_started_at.desc())
-        .all()
-    )
-
-    latest_by_strategy = {}
-
-    for row in results:
-        if row.technique not in latest_by_strategy:
-            latest_by_strategy[row.technique] = row
-
-    return {
-        strategy: {
-            "run_id": str(row.run_id),
-            "status": row.status,
-            "total_checks": row.total_checks,
-            "failed_checks": row.failed_checks,
-            "outage_count": row.outage_count,
-            "total_downtime_seconds": row.total_downtime_seconds,
-            "zero_downtime": row.zero_downtime,
-            "monitoring_started_at": row.monitoring_started_at,
-            "monitoring_ended_at": row.monitoring_ended_at,
-        }
-        for strategy, row in latest_by_strategy.items()
-    }
 
 
 @router.post("/blue-green/{version}")
