@@ -16,6 +16,7 @@ import AdaptiveAIConsole from './components/AdaptiveAIConsole';
 import TrafficControl from './components/TrafficControl';
 import RunHistory from './components/RunHistory';
 import AvailabilityPanel from './components/AvailabilityPanel';
+import AdaptiveCanaryPanel from './components/AdaptiveCanaryPanel';
 
 import {
   query,
@@ -601,8 +602,15 @@ export default function App() {
             />
 
             <PodTable pods={selectedPods} />
-            <AvailabilityPanel strategy={selectedStrategy} />
-            {selectedStrategy === 'rolling' && <AdvancedAnalytics />}
+
+              <AvailabilityPanel strategy={selectedStrategy} />
+
+              {/* Adaptive Canary traffic monitoring - Canary only */}
+              {selectedStrategy === 'canary' && (
+  <AdaptiveCanaryPanel />
+)}
+
+{selectedStrategy === 'rolling' && <AdvancedAnalytics />}
 
           </div>
         )}

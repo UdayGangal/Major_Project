@@ -55,7 +55,7 @@ def create_traffic_job(strategy, session_id):
         target_url = (
             "http://istio-ingressgateway.istio-system.svc.cluster.local/"
         )
-        headers = 'headers: { Host: "canary.local" },'
+        headers = 'headers: { Host: "canary.localhost" },'
     else:
         service = config["service"]
         target_url = (

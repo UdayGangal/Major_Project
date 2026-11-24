@@ -14,6 +14,7 @@ from .routers import (
     history,
     traffic,
     availability,
+    adaptive_canary,
 )
 from .services.port_forward_manager import port_forward_manager
 from .services.availability_monitor import availability_monitor
@@ -53,3 +54,4 @@ app.include_router(logs.router)
 app.include_router(history.router)
 app.include_router(traffic.router)
 app.include_router(availability.router)
+app.include_router(adaptive_canary.router)
