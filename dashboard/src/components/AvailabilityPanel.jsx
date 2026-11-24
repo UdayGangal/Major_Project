@@ -1,32 +1,32 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-const STRATEGIES = [
-  'rolling',
-  'recreate',
-  'blue-green',
-  'canary'
-];
+const STRATEGIES = ['rolling', 'recreate', 'blue-green', 'canary'];
 
-const STRATEGY_NAMES = {
+const NAMES = {
   rolling: 'Rolling Update',
   recreate: 'Recreate',
   'blue-green': 'Blue-Green',
-  canary: 'Canary'
+  canary: 'Canary',
 };
 
-function formatDuration(seconds) {
-  if (seconds == null || !Number.isFinite(Number(seconds))) {
-    return '—';
-  }
+const PORTS = {
+  rolling: 8081,
+  recreate: 8082,
+  'blue-green': 8083,
+  canary: 8084,
+};
+
+function duration(seconds) {
+  if (seconds == null || !Number.isFinite(Number(seconds))) return '—';
 
   const total = Math.max(0, Math.floor(Number(seconds)));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const secs = total % 60;
 
-  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
-  if (minutes > 0) return `${minutes}m ${secs}s`;
+  if (hours) return `${hours}h ${minutes}m ${secs}s`;
+  if (minutes) return `${minutes}m ${secs}s`;
   return `${secs}s`;
 }
 
@@ -34,10 +34,7 @@ function formatDate(value) {
   if (!value) return '—';
 
   const date = new Date(value);
-
-  return Number.isNaN(date.getTime())
-    ? '—'
-    : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
 export default function AvailabilityPanel({ strategy = null }) {
@@ -46,35 +43,34 @@ export default function AvailabilityPanel({ strategy = null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const visibleStrategies = strategy ? [strategy] : STRATEGIES;
+
   const fetchAvailability = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
+      const params = strategy
+        ? `?strategy=${encodeURIComponent(strategy)}`
+        : '';
 
-      if (strategy) {
-        params.set('strategy', strategy);
-      }
-
-      const [statusResponse, outagesResponse] = await Promise.all([
-        fetch(`/api/availability/status?${params.toString()}`),
-        fetch(`/api/availability/outages?${params.toString()}`)
+      const [statusResponse, outageResponse] = await Promise.all([
+        fetch(`/api/availability/status${params}`),
+        fetch(`/api/availability/outages${params}`),
       ]);
 
       if (!statusResponse.ok) {
-        throw new Error(`Status API returned ${statusResponse.status}`);
+        throw new Error(`Status API error: ${statusResponse.status}`);
       }
 
-      if (!outagesResponse.ok) {
-        throw new Error(`Outages API returned ${outagesResponse.status}`);
+      if (!outageResponse.ok) {
+        throw new Error(`Outage API error: ${outageResponse.status}`);
       }
 
       const statusData = await statusResponse.json();
-      const outagesData = await outagesResponse.json();
+      const outageData = await outageResponse.json();
 
       setStatuses(statusData || {});
-      setOutages(Array.isArray(outagesData) ? outagesData : []);
+      setOutages(Array.isArray(outageData) ? outageData : []);
       setError('');
     } catch (err) {
-      console.error('Availability fetch failed:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -85,49 +81,54 @@ export default function AvailabilityPanel({ strategy = null }) {
     setLoading(true);
     fetchAvailability();
 
-    const timer = setInterval(fetchAvailability, 2000);
+    const interval = setInterval(fetchAvailability, 2000);
 
-    return () => clearInterval(timer);
+    return () => clearInterval(interval);
   }, [fetchAvailability]);
-
-  const visibleStrategies = strategy ? [strategy] : STRATEGIES;
 
   return (
     <section className="availability-panel">
       <div className="availability-header">
         <div>
-          <p className="panel-kicker">HTTP AVAILABILITY MONITOR</p>
-          <h2>Service Availability & Downtime</h2>
+          <p className="panel-kicker">INDEPENDENT HTTP MONITORING</p>
+          <h2>Service Availability &amp; Downtime</h2>
           <p className="availability-subtitle">
-            Independent live health monitoring for each deployment strategy
+            Live availability and independent downtime history for each strategy.
           </p>
         </div>
-
-        <button
-          type="button"
-          className="availability-refresh"
-          onClick={fetchAvailability}
-        >
-          ↻ Refresh
-        </button>
       </div>
 
       {error && (
         <div className="availability-error">
-          Could not load availability data: {error}
+          Unable to load availability: {error}
         </div>
       )}
 
       <div className="availability-strategy-grid">
-        {visibleStrategies.map(currentStrategy => {
-          const item = statuses[currentStrategy] || {};
-          const isDown = item.is_down === true;
+        {visibleStrategies.map((current) => {
+          const item = statuses[current] || {};
 
-          const activeDuration =
-            isDown && item.outage_started_at
+          const active = item.monitoring_active === true;
+          const down = item.site_status === 'DOWN';
+          const checking = item.site_status === 'CHECKING';
+          const hasChecks = Number(item.total_checks || 0) > 0;
+
+          const siteLabel = loading
+            ? 'LOADING'
+            : down
+              ? 'SERVICE DOWN'
+              : checking
+                ? 'CHECKING'
+                : hasChecks
+                  ? 'SERVICE UP'
+                  : 'NOT MONITORED';
+
+          const activeDowntime =
+            down && item.outage_started_at
               ? Math.max(
                   0,
-                  (Date.now() - new Date(item.outage_started_at).getTime()) / 1000
+                  (Date.now() -
+                    new Date(item.outage_started_at).getTime()) / 1000
                 )
               : 0;
 
@@ -135,79 +136,72 @@ export default function AvailabilityPanel({ strategy = null }) {
             item.total_downtime_seconds || 0
           );
 
-          const strategyOutages = outages.filter(
-            outage => outage.strategy === currentStrategy
-          );
+          const strategyOutages = outages
+            .filter((outage) => outage.strategy === current)
+            .sort(
+              (a, b) =>
+                new Date(b.outage_started_at) -
+                new Date(a.outage_started_at)
+            );
 
           return (
-            <div
+            <article
               className="availability-strategy-card"
-              key={currentStrategy}
+              key={current}
             >
               <div className="availability-header">
                 <div>
-                  <p className="panel-kicker">
-                    {STRATEGY_NAMES[currentStrategy]}
-                  </p>
-                  <h3>
-                    {loading
-                      ? 'Checking...'
-                      : isDown
-                        ? 'SERVICE DOWN'
-                        : item.monitoring_active
-                          ? 'SERVICE UP'
-                          : item.status === 'COMPLETED'
-                            ? 'MONITORING COMPLETED'
-                            : 'NOT MONITORED'}
-                  </h3>
+                  <p className="panel-kicker">{NAMES[current]}</p>
+                  <h3>{siteLabel}</h3>
+                  <small>
+                    Health endpoint: localhost:{PORTS[current]}/health
+                  </small>
                 </div>
 
                 <span
-                  className={`availability-status ${isDown ? 'down' : 'up'}`}
+                  className={`availability-status ${
+                    down ? 'down' : hasChecks && !checking ? 'up' : 'checking'
+                  }`}
                 >
                   <span className="availability-status-dot" />
-                  {isDown ? 'DOWN' : 'UP'}
+                  {down ? 'DOWN' : hasChecks ? 'UP' : '—'}
                 </span>
               </div>
 
               <div className="availability-stats">
                 <div className="availability-stat">
                   <span>Current Status</span>
-                  <strong className={isDown ? 'text-down' : 'text-up'}>
-                    {isDown ? 'DOWN' : 'UP'}
+                  <strong className={down ? 'text-down' : hasChecks ? 'text-up' : ''}>
+                    {down ? 'DOWN' : hasChecks ? 'UP' : 'NOT MONITORED'}
                   </strong>
                   <small>
-                    {item.monitoring_active
+                    {active
                       ? 'Live monitoring'
                       : item.status === 'COMPLETED'
                         ? 'Last run completed'
-                        : 'No active run'}
+                        : 'No active monitoring run'}
                   </small>
                 </div>
 
                 <div className="availability-stat">
                   <span>Total Outages</span>
                   <strong>{item.outage_count ?? 0}</strong>
-                  <small>For this deployment run</small>
+                  <small>This strategy only</small>
                 </div>
 
                 <div className="availability-stat">
                   <span>Total Downtime</span>
-                  <strong>
-                    {formatDuration(totalDowntime)}
-                  </strong>
+                  <strong>{duration(totalDowntime)}</strong>
                   <small>Recorded for this run</small>
                 </div>
 
                 <div className="availability-stat">
                   <span>Current Outage</span>
                   <strong>
-                    {isDown
-                      ? formatDuration(activeDuration)
-                      : '—'}
+                    {down ? duration(activeDowntime) : '—'}
                   </strong>
                   <small>
-                    {isDown
+                    {down
                       ? `Since ${formatDate(item.outage_started_at)}`
                       : 'No active outage'}
                   </small>
@@ -216,22 +210,18 @@ export default function AvailabilityPanel({ strategy = null }) {
                 <div className="availability-stat">
                   <span>Health Checks</span>
                   <strong>{item.total_checks ?? 0}</strong>
-                  <small>
-                    {item.failed_checks ?? 0} failed checks
-                  </small>
+                  <small>{item.failed_checks ?? 0} failed checks</small>
                 </div>
 
                 <div className="availability-stat">
                   <span>Last Recovery</span>
-                  <strong>
-                    {formatDate(item.last_recovered_at)}
-                  </strong>
-                  <small>Most recent recovery in this run</small>
+                  <strong>{formatDate(item.last_recovered_at)}</strong>
+                  <small>Most recent recovery</small>
                 </div>
               </div>
 
               <div className="availability-history">
-                <h3>Outage History</h3>
+                <h3>{NAMES[current]} — Outage History</h3>
 
                 {strategyOutages.length === 0 ? (
                   <div className="availability-empty">
@@ -244,22 +234,24 @@ export default function AvailabilityPanel({ strategy = null }) {
                         <tr>
                           <th>Outage Started</th>
                           <th>Recovered At</th>
-                          <th>Duration</th>
+                          <th>Downtime</th>
                           <th>Status</th>
                         </tr>
                       </thead>
 
                       <tbody>
-                        {strategyOutages.map(outage => {
-                          const active =
-                            outage.status === 'DOWN' ||
-                            !outage.recovered_at;
+                        {strategyOutages.map((outage) => {
+                          const ongoing =
+                            !outage.recovered_at ||
+                            outage.status === 'DOWN';
 
-                          const duration = active
-                            ? (
-                                Date.now() -
-                                new Date(outage.outage_started_at).getTime()
-                              ) / 1000
+                          const elapsed = ongoing
+                            ? Math.max(
+                                0,
+                                (Date.now() -
+                                  new Date(outage.outage_started_at).getTime()) /
+                                  1000
+                              )
                             : outage.downtime_seconds;
 
                           return (
@@ -270,16 +262,16 @@ export default function AvailabilityPanel({ strategy = null }) {
                               <td>
                                 {formatDate(outage.recovered_at)}
                               </td>
-                              <td>{formatDuration(duration)}</td>
+                              <td>{duration(elapsed)}</td>
                               <td>
                                 <span
                                   className={`outage-badge ${
-                                    active
+                                    ongoing
                                       ? 'outage-active'
                                       : 'outage-recovered'
                                   }`}
                                 >
-                                  {active ? 'DOWN' : 'RECOVERED'}
+                                  {ongoing ? 'DOWN' : 'RECOVERED'}
                                 </span>
                               </td>
                             </tr>
@@ -290,7 +282,7 @@ export default function AvailabilityPanel({ strategy = null }) {
                   </div>
                 )}
               </div>
-            </div>
+            </article>
           );
         })}
       </div>

@@ -96,10 +96,17 @@ def get_availability_status(
 
         is_down = active_outage is not None
 
+        if is_down:
+            site_status = "DOWN"
+        elif result.total_checks == 0:
+            site_status = "CHECKING"
+        else:
+            site_status = "UP"
+
         response[current_strategy] = {
             "strategy": current_strategy,
             "monitoring_active": result.status == "RUNNING",
-            "site_status": "DOWN" if is_down else "UP",
+            "site_status": site_status,
             "is_down": is_down,
             "run_id": str(result.run_id),
             "outage_started_at": (
